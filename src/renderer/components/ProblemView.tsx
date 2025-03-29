@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Calendar } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Calendar, Scan, Maximize, XCircle } from 'lucide-react';
 import { useNotes, useAnkiConnect, useMediaFiles } from '../hooks';
 import { NoteInfo } from '../types/ankiConnect';
+import scansnap, { COLOR_MODE, COMPRESSION, FORMAT, SCAN_MODE, SCANNING_SIDE } from '../../scansnap';
 
 // 問題データの型定義
 interface ProblemData {
@@ -25,15 +25,14 @@ interface ProblemViewProps {
  * CurrentProblemとProblemDetailで共通して使用される
  */
 const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack }: ProblemViewProps) => {
-  const { notes, isLoading, error: noteError, fetchCurrentCard, fetchNoteById, addAnswerToNote } = useNotes();
+  const { isLoading, error: noteError, fetchCurrentCard, fetchNoteById, addAnswerToNote } = useNotes();
   const { isConnected, testConnection } = useAnkiConnect();
   const { 
     mediaServerUrl, 
     uploadImage, 
     handleFileDrop,
     isLoading: isMediaLoading,
-    error: mediaError,
-    clearMediaCache
+    error: mediaError
   } = useMediaFiles();
   
   const [problemData, setProblemData] = useState<ProblemData | null>(null);
@@ -47,6 +46,11 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   
+  // スキャナー関連の状態
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannerInitialized, setScannerInitialized] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  
   // パネル表示制御用の状態
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
@@ -54,6 +58,9 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   // 解答と過去の解答用紙の表示制御
   const [showAnswer, setShowAnswer] = useState(false);
   const [selectedAnswerDate, setSelectedAnswerDate] = useState<string | null>(null);
+  
+  // 画像拡大ダイアログの状態
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
 
   // AnkiConnectとの接続を確認
   useEffect(() => {
@@ -64,6 +71,110 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
     
     checkConnection();
   }, [testConnection]);
+  
+  // スキャナーの初期化
+  useEffect(() => {
+    const initializeScanner = async () => {
+      try {
+        setScannerError(null);
+        const result = await scansnap.initialize();
+        setScannerInitialized(result === 0);
+        if (result !== 0) {
+          setScannerError('スキャナーの初期化に失敗しました');
+        }
+      } catch (err) {
+        setScannerError(err instanceof Error ? err.message : 'スキャナーの初期化に失敗しました');
+        setScannerInitialized(false);
+      }
+    };
+    
+    initializeScanner();
+    
+  // コンポーネントのアンマウント時にスキャナーをクリーンアップ
+  // preserveSession=true を指定して、セッションをローカルストレージに保持
+  return () => {
+    scansnap.cleanup(true);
+  };
+  }, []);
+  
+  // スキャンイベントのハンドラーを設定
+  useEffect(() => {
+    if (!scannerInitialized) return;
+    
+    // スキャン完了時のイベントハンドラー
+    scansnap.on('scanFinish', async (fileIds: string[]) => {
+      try {
+        // スキャンされた各ファイルをBase64データとして取得
+        const scanPromises = fileIds.map(async (fileId) => {
+          try {
+            // 常にJPG形式として取得
+            const fileInfo = await scansnap.getBlobData(fileId);
+            const blob = new Blob([fileInfo], { type: 'image/jpeg' });
+            const file = new File([blob], `scan_${Date.now()}.jpg`, { type: 'image/jpeg' });
+            
+            // 画像をプレビューに追加
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const result = event.target?.result;
+              if (result && typeof result === 'string') {
+                setImagePreviews(prevPreviews => [...prevPreviews, result]);
+              }
+            };
+            reader.readAsDataURL(file);
+            
+            return file;
+          } catch (err) {
+            console.error('Failed to process scanned file:', err);
+            return null;
+          }
+        });
+        
+        const scannedFiles = await Promise.all(scanPromises);
+        const validFiles = scannedFiles.filter((file): file is File => file !== null);
+        
+        // 画像リストに追加
+        setImages(prevImages => [...prevImages, ...validFiles]);
+        setIsScanning(false);
+      } catch (err) {
+        setScannerError(err instanceof Error ? err.message : 'スキャン画像の処理に失敗しました');
+        setIsScanning(false);
+      }
+    });
+    
+    return () => {
+      // イベントリスナーのクリーンアップは不要（scansnap内部で管理）
+    };
+  }, [scannerInitialized]);
+  
+  // スキャン実行関数
+  const handleScan = async () => {
+    if (!scannerInitialized) {
+      setScannerError('スキャナーが初期化されていません');
+      return;
+    }
+    
+    try {
+      setIsScanning(true);
+      setScannerError(null);
+      
+      // スキャン設定
+      scansnap.state.format = FORMAT.JPEG;
+      scansnap.state.colorMode = COLOR_MODE.COLOR;
+      scansnap.state.compression = COMPRESSION.LOW;
+      scansnap.state.scanMode = SCAN_MODE.SUPER_FINE;
+      scansnap.state.scanningSide = SCANNING_SIDE.SIMPLEX;
+      
+      // スキャン実行
+      const result = await scansnap.scan();
+      
+      if (result !== 0) {
+        throw new Error(`スキャンに失敗しました (エラーコード: ${result})`);
+      }
+    } catch (err) {
+      setScannerError(err instanceof Error ? err.message : 'スキャンに失敗しました');
+      setIsScanning(false);
+    }
+  };
 
   // 接続が確立されたら問題を取得
   useEffect(() => {
@@ -116,10 +227,6 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
     }
   };
 
-  // HTMLタグを除去してプレーンテキストを取得する関数
-  const stripHtml = (html: string) => {
-    return html.replace(/<[^>]*>/g, '');
-  };
   
   // 裏面の内容から解答エントリを抽出する関数
   const extractAnswerEntries = (backContent: string): { date: string; content: string }[] => {
@@ -385,6 +492,30 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                 メモと解答画像
               </h2>
               
+              {/* スキャナーエラー表示 */}
+              {scannerError && renderError(scannerError)}
+              
+              {/* スキャンボタン */}
+              <div className="mb-4 flex justify-center">
+                <button
+                  className="btn btn-secondary flex items-center"
+                  onClick={handleScan}
+                  disabled={!scannerInitialized || isScanning}
+                >
+                  {isScanning ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                      スキャン中...
+                    </>
+                  ) : (
+                    <>
+                      <Scan className="w-4 h-4 mr-2" />
+                      スキャナーで読み取り
+                    </>
+                  )}
+                </button>
+              </div>
+              
               {/* 画像アップロード */}
               <div 
                 className={`border-2 border-dashed rounded-lg p-8 mb-4 text-center cursor-pointer
@@ -403,7 +534,11 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                           <img 
                             src={preview} 
                             alt={`アップロードされた解答 ${index + 1}`} 
-                            className="max-h-48 mx-auto"
+                            className="max-h-48 mx-auto cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEnlargedImage(preview);
+                            }}
                           />
                           <button
                             className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-1"
@@ -414,6 +549,16 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                             title="削除"
                           >
                             <X className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="absolute bottom-0 right-0 bg-blue-500 text-white rounded-full p-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEnlargedImage(preview);
+                            }}
+                            title="拡大"
+                          >
+                            <Maximize className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
@@ -639,6 +784,26 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
               )}
             </div>
           )}
+        </div>
+      )}
+      
+      {/* 画像拡大ダイアログ */}
+      {enlargedImage && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-4xl max-h-full">
+            <img 
+              src={enlargedImage} 
+              alt="拡大画像" 
+              className="max-h-[90vh] max-w-full object-contain"
+            />
+            <button
+              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 shadow-lg"
+              onClick={() => setEnlargedImage(null)}
+              title="閉じる"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+          </div>
         </div>
       )}
     </div>
