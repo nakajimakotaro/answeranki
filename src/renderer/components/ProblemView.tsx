@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Calendar, Scan, Maximize, XCircle } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Calendar, Scan, Maximize, XCircle, Play, Pause, StopCircle, Clock } from 'lucide-react';
 import { useNotes, useAnkiConnect, useMediaFiles } from '../hooks';
 import { NoteInfo } from '../types/ankiConnect';
 import scansnap, { COLOR_MODE, COMPRESSION, FORMAT, SCAN_MODE, SCANNING_SIDE } from '../../scansnap';
@@ -61,7 +61,74 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   
   // 画像拡大ダイアログの状態
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+  
+  // タイマー関連の状態
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const timerRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+  
+  // 解答時間入力用の状態
+  const [solvingTime, setSolvingTime] = useState('');
 
+  // タイマー機能
+  const startTimer = () => {
+    if (timerRunning) return;
+    
+    setTimerRunning(true);
+    startTimeRef.current = Date.now() - elapsedTime;
+    
+    timerRef.current = window.setInterval(() => {
+      if (startTimeRef.current !== null) {
+        setElapsedTime(Date.now() - startTimeRef.current);
+      }
+    }, 100);
+  };
+  
+  const pauseTimer = () => {
+    if (!timerRunning) return;
+    
+    setTimerRunning(false);
+    if (timerRef.current !== null) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+  
+  const resetTimer = () => {
+    pauseTimer();
+    setElapsedTime(0);
+    startTimeRef.current = null;
+    setSolvingTime('');
+  };
+  
+  // タイマーの表示形式を整える（分と秒）
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}分${seconds}秒`;
+  };
+  
+  // タイマー時間を解答時間フィールドに反映（分と秒）
+  useEffect(() => {
+    if (elapsedTime > 0) {
+      const totalSeconds = Math.floor(elapsedTime / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      setSolvingTime(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+    }
+  }, [elapsedTime]);
+  
+  // コンポーネントのアンマウント時にタイマーをクリア
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+  
   // AnkiConnectとの接続を確認
   useEffect(() => {
     const checkConnection = async () => {
@@ -321,10 +388,16 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
       // 複数の画像ファイル名をカンマ区切りで連結
       const imageFilenames = uploadResults.map(result => result.filename).join(',');
       
+      // 解答時間を含めたメモを作成
+      let memoWithTime = memo;
+      if (solvingTime) {
+        memoWithTime = `【解答時間: ${solvingTime}】\n${memo}`;
+      }
+      
       const success = await addAnswerToNote(
         problemData.noteId,
         imageFilenames,
-        memo,
+        memoWithTime,
         '過去解答'
       );
       
@@ -343,6 +416,8 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
         setMemo('');
         setImages([]);
         setImagePreviews([]);
+        setSolvingTime('');
+        resetTimer();
         
         // コンポーネントアンマウント時にタイマーをクリア
         return () => clearTimeout(timer);
@@ -439,6 +514,42 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
         </div>
       </div>
       
+      {/* タイマー */}
+      <div className="mb-6 p-4 border rounded-lg shadow-sm bg-white">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <Clock className="w-5 h-5 mr-2 text-gray-600" />
+            <h2 className="text-lg font-semibold">解答時間</h2>
+          </div>
+          <div className="text-2xl font-mono font-bold">{formatTime(elapsedTime)}</div>
+        </div>
+        <div className="flex justify-center gap-3 mt-3">
+          <button
+            onClick={startTimer}
+            disabled={timerRunning}
+            className={`btn ${timerRunning ? 'btn-disabled' : 'btn-success'} flex items-center`}
+          >
+            <Play className="w-4 h-4 mr-1" />
+            開始
+          </button>
+          <button
+            onClick={pauseTimer}
+            disabled={!timerRunning}
+            className={`btn ${!timerRunning ? 'btn-disabled' : 'btn-warning'} flex items-center`}
+          >
+            <Pause className="w-4 h-4 mr-1" />
+            一時停止
+          </button>
+          <button
+            onClick={resetTimer}
+            className="btn btn-error flex items-center"
+          >
+            <StopCircle className="w-4 h-4 mr-1" />
+            リセット
+          </button>
+        </div>
+      </div>
+      
       {!isConnected && connectionChecked && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 flex items-start">
           <AlertCircle className="w-5 h-5 mr-2 mt-0.5" />
@@ -491,6 +602,28 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                 <Edit className="w-5 h-5 mr-2" />
                 メモと解答画像
               </h2>
+              
+              {/* 解答時間入力フィールド */}
+              <div className="mb-4">
+                <label htmlFor="solving-time" className="block text-sm font-medium text-gray-700 mb-1">
+                  解答時間（分:秒）
+                </label>
+                <div className="flex items-center">
+                  <input
+                    id="solving-time"
+                    type="text"
+                    className="w-24 p-2 border border-gray-300 rounded-md mr-2"
+                    placeholder="0:00"
+                    value={solvingTime}
+                    onChange={(e) => setSolvingTime(e.target.value)}
+                    pattern="[0-9]+:[0-5][0-9]"
+                  />
+                  <span className="text-gray-600">（分:秒）</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  タイマーを使用すると自動的に入力されます
+                </p>
+              </div>
               
               {/* スキャナーエラー表示 */}
               {scannerError && renderError(scannerError)}
