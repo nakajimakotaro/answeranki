@@ -105,17 +105,3 @@ export const setupMediaRoutes = (app: Express): void => {
     res.status(200).json({ success: true });
   });
 };
-
-// Keep the old function for backward compatibility, but make it deprecated
-/**
- * @deprecated Use setupMediaRoutes instead
- */
-export const setupMediaServer = (port: number): void => {
-  console.warn('setupMediaServer is deprecated. Use setupMediaRoutes instead.');
-  const app = express();
-  app.use(express.json());
-  setupMediaRoutes(app);
-  app.listen(port, () => {
-    console.log(`Deprecated media server running at http://localhost:${port}/`);
-  });
-};
