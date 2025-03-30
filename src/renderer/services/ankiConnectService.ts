@@ -17,7 +17,7 @@ import {
  */
 class AnkiConnectService {
   private config: AnkiConnectConfig = {
-    url: 'http://localhost:8765',
+    url: '/api/anki', // Use the proxy endpoint
     version: 6
   };
 
@@ -41,19 +41,16 @@ class AnkiConnectService {
     action: string,
     params: Record<string, any> = {}
   ): Promise<T> {
-    const request: AnkiConnectRequest = {
-      action,
-      version: this.config.version,
-      params
-    };
-
     try {
       const response = await fetch(this.config.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(request)
+        body: JSON.stringify({
+          action,
+          params
+        })
       });
 
       if (!response.ok) {
@@ -177,20 +174,15 @@ class AnkiConnectService {
    * @returns デッキ名
    */
   async getDeckNameByNoteId(noteId: number): Promise<string | null> {
-    try {
-      const response = await this.sendRequest<AnkiConnectResponse>('cardsInfo', {
-        cards: [noteId]
-      });
-      
-      const cardsInfo = response.result as any[];
-      if (cardsInfo && cardsInfo.length > 0) {
-        return cardsInfo[0].deckName;
-      }
-      return null;
-    } catch (error) {
-      console.error('Failed to get deck name:', error);
-      return null;
+    const response = await this.sendRequest<AnkiConnectResponse>('cardsInfo', {
+      cards: [noteId]
+    });
+    
+    const cardsInfo = response.result as any[];
+    if (cardsInfo && cardsInfo.length > 0) {
+      return cardsInfo[0].deckName;
     }
+    return null;
   }
   
   /**
@@ -200,16 +192,11 @@ class AnkiConnectService {
    * @returns 成功したかどうか
    */
   async addTag(noteIds: number[], tag: string): Promise<boolean> {
-    try {
-      const response = await this.sendRequest<AnkiConnectResponse>('addTags', {
-        notes: noteIds,
-        tags: tag
-      });
-      return response.result === null || response.result === true;
-    } catch (error) {
-      console.error('Failed to add tag:', error);
-      return false;
-    }
+    const response = await this.sendRequest<AnkiConnectResponse>('addTags', {
+      notes: noteIds,
+      tags: tag
+    });
+    return response.result === null || response.result === true;
   }
   
   /**
@@ -219,16 +206,11 @@ class AnkiConnectService {
    * @returns 成功したかどうか
    */
   async removeTag(noteIds: number[], tag: string): Promise<boolean> {
-    try {
-      const response = await this.sendRequest<AnkiConnectResponse>('removeTags', {
-        notes: noteIds,
-        tags: tag
-      });
-      return response.result === null || response.result === true;
-    } catch (error) {
-      console.error('Failed to remove tag:', error);
-      return false;
-    }
+    const response = await this.sendRequest<AnkiConnectResponse>('removeTags', {
+      notes: noteIds,
+      tags: tag
+    });
+    return response.result === null || response.result === true;
   }
 
   /**
@@ -236,19 +218,14 @@ class AnkiConnectService {
    * @returns カード情報（カードID、フィールド、質問、回答など）
    */
   async getCurrentCard(): Promise<any | null> {
-    try {
-      const response = await this.sendRequest<AnkiConnectResponse>('guiCurrentCard');
-      
-      // レスポンスにnoteIdがない場合は、cardIdをnoteIdとして使用
-      if (response.result && response.result.cardId && !response.result.noteId) {
-        response.result.noteId = response.result.cardId;
-      }
-      
-      return response.result || null;
-    } catch (error) {
-      console.error('Failed to get current card:', error);
-      return null;
+    const response = await this.sendRequest<AnkiConnectResponse>('guiCurrentCard');
+    
+    // レスポンスにnoteIdがない場合は、cardIdをnoteIdとして使用
+    if (response.result && response.result.cardId && !response.result.noteId) {
+      response.result.noteId = response.result.cardId;
     }
+    
+    return response.result || null;
   }
 
   /**
@@ -257,16 +234,11 @@ class AnkiConnectService {
    * @returns カード情報のリスト
    */
   async getCardsInfo(cardIds: number[]): Promise<any[]> {
-    try {
-      const response = await this.sendRequest<AnkiConnectResponse>('cardsInfo', {
-        cards: cardIds
-      });
-      
-      return response.result || [];
-    } catch (error) {
-      console.error('Failed to get cards info:', error);
-      return [];
-    }
+    const response = await this.sendRequest<AnkiConnectResponse>('cardsInfo', {
+      cards: cardIds
+    });
+    
+    return response.result || [];
   }
 }
 

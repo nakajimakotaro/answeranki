@@ -37,8 +37,7 @@ export function useDecks() {
     setError(null);
     
     try {
-      const deckName = await ankiConnectService.getDeckNameByNoteId(noteId);
-      return deckName;
+      return await ankiConnectService.getDeckNameByNoteId(noteId);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('デッキ名の取得に失敗しました'));
       return null;

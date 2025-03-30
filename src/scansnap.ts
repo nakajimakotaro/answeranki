@@ -353,23 +353,24 @@ class ScanSnapWebSDK {
    */
   async initialize(): Promise<number> {
     this.#isInitialized = true;
-    try {
-      // If we have a valid session ID from local storage, try to use it
-      if (this.#sessionId) {
-        try {
-          // Verify the session is still valid
-          const sessionData: SessionData = await this.#getSessionId();
-          if (sessionData?.keyword === SERVER_ID && sessionData?.sessionid) {
-            this.#sessionId = sessionData.sessionid;
-            this.#saveSessionToStorage();
-            return sessionData.code;
-          }
-        } catch (err) {
-          console.log("Stored session is no longer valid, requesting new session:", err);
-          // Continue with normal initialization if stored session is invalid
+    
+    // If we have a valid session ID from local storage, try to use it
+    if (this.#sessionId) {
+      try {
+        // Verify the session is still valid
+        const sessionData: SessionData = await this.#getSessionId();
+        if (sessionData?.keyword === SERVER_ID && sessionData?.sessionid) {
+          this.#sessionId = sessionData.sessionid;
+          this.#saveSessionToStorage();
+          return sessionData.code;
         }
+      } catch (err) {
+        console.log("Stored session is no longer valid, requesting new session:", err);
+        // Continue with normal initialization if stored session is invalid
       }
-      
+    }
+    
+    try {
       const sessionData: SessionData = await this.#getSessionId();
       if (sessionData?.keyword === SERVER_ID && sessionData?.sessionid) {
         this.#sessionId = sessionData.sessionid;
@@ -580,7 +581,9 @@ class ScanSnapWebSDK {
       body: JSON.stringify(this.state)
     });
 
+    console.log("Scan request response:", response);
     const result: ScanResult = await response.json();
+    console.log("Scan result:", result);
     if (!result?.data?.length) throw new Error("Invalid scan data");
 
     const fileIds: string[] = result.data

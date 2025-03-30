@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Calendar, Scan, Maximize, XCircle, Play, Pause, StopCircle, Clock } from 'lucide-react';
+import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Scan, Maximize, XCircle, Play, Pause, StopCircle, Clock } from 'lucide-react';
 import { useNotes, useAnkiConnect, useMediaFiles } from '../hooks';
 import { NoteInfo } from '../types/ankiConnect';
 import scansnap, { COLOR_MODE, COMPRESSION, FORMAT, SCAN_MODE, SCANNING_SIDE } from '../../scansnap';
+import { nanoid } from 'nanoid';
 
 // 問題データの型定義
 interface ProblemData {
@@ -28,12 +29,14 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   const { isLoading, error: noteError, fetchCurrentCard, fetchNoteById, addAnswerToNote } = useNotes();
   const { isConnected, testConnection } = useAnkiConnect();
   const { 
-    mediaServerUrl, 
     uploadImage, 
     handleFileDrop,
     isLoading: isMediaLoading,
     error: mediaError
   } = useMediaFiles();
+  
+  // メディアサーバーのURL
+  const mediaServerUrl = '/media'; // プロキシ経由でアクセス
   
   const [problemData, setProblemData] = useState<ProblemData | null>(null);
   const [connectionChecked, setConnectionChecked] = useState(false);
@@ -57,7 +60,6 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   
   // 解答と過去の解答用紙の表示制御
   const [showAnswer, setShowAnswer] = useState(false);
-  const [selectedAnswerDate, setSelectedAnswerDate] = useState<string | null>(null);
   
   // 画像拡大ダイアログの状態
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
@@ -177,7 +179,7 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
             // 常にJPG形式として取得
             const fileInfo = await scansnap.getBlobData(fileId);
             const blob = new Blob([fileInfo], { type: 'image/jpeg' });
-            const file = new File([blob], `scan_${Date.now()}.jpg`, { type: 'image/jpeg' });
+            const file = new File([blob], `scan_${nanoid(10)}.jpg`, { type: 'image/jpeg' });
             
             // 画像をプレビューに追加
             const reader = new FileReader();
@@ -281,12 +283,9 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
       if (data) {
         setProblemData(data);
         
-        // 過去の解答エントリがある場合、最新の日付を選択
+        // 過去の解答エントリを取得
         if (data.noteInfo?.fields?.裏面?.value) {
-          const entries = extractAnswerEntries(data.noteInfo.fields.裏面.value);
-          if (entries.length > 0) {
-            setSelectedAnswerDate(entries[0].date);
-          }
+          extractAnswerEntries(data.noteInfo.fields.裏面.value);
         }
       }
     } catch (err) {
@@ -299,7 +298,7 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   const extractAnswerEntries = (backContent: string): { date: string; content: string }[] => {
     if (!backContent) return [];
     
-    // 解答エントリを抽出
+    // 解答エントリを抽出（過去解答と通常の解答エントリの両方に対応）
     const entryRegex = /<div class="answer-entry"><p><strong>([^<]+)<\/strong><\/p>([\s\S]*?)<\/div>/g;
     const entries: { date: string; content: string }[] = [];
     
@@ -314,8 +313,31 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
       });
     }
     
+    // 過去解答セクションを抽出
+    if (backContent.includes('<hr><div class="answer-entry">')) {
+      const pastAnswerRegex = /<hr><div class="answer-entry"><p><strong>([^<]+)<\/strong><\/p>([\s\S]*?)<\/div>/g;
+      
+      while ((match = pastAnswerRegex.exec(backContent)) !== null) {
+        const dateStr = match[1]; // 日付と時刻
+        const content = match[0]; // エントリ全体
+        
+        // 重複を避けるため、既に同じ日付のエントリがないか確認
+        if (!entries.some(entry => entry.date === dateStr)) {
+          entries.push({
+            date: dateStr,
+            content: content
+          });
+        }
+      }
+    }
+    
     // 新しい順に並べ替え
-    return entries.reverse();
+    return entries.sort((a, b) => {
+      // 日付文字列をDate型に変換して比較
+      const dateA = new Date(a.date.replace(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+):(\d+)/, '$3-$1-$2T$4:$5:$6'));
+      const dateB = new Date(b.date.replace(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+):(\d+)/, '$3-$1-$2T$4:$5:$6'));
+      return dateB.getTime() - dateA.getTime();
+    });
   };
 
   // 画像のドロップハンドラー
@@ -365,8 +387,14 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
 
   // 保存処理
   const handleSave = async () => {
-    if (images.length === 0 || !problemData) {
-      setSaveError('画像がアップロードされていないか、カード情報が取得できていません');
+    // 画像がなくてもメモや解答時間があれば保存できるように変更
+    if (!problemData) {
+      setSaveError('カード情報が取得できていません');
+      return;
+    }
+    // 画像もメモ(空白以外)も解答時間もない場合は保存しない
+    if (images.length === 0 && !memo.trim() && !solvingTime) {
+      setSaveError('保存する内容（画像、メモ、または解答時間）がありません');
       return;
     }
     
@@ -374,19 +402,25 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
     setSaveError(null);
     
     try {
-      // 1. すべての画像をAnkiのメディアフォルダに保存
-      const uploadPromises = images.map(image => uploadImage(image));
-      const uploadResults = await Promise.all(uploadPromises);
+      let imageFilenames = '';
       
-      // アップロード失敗がないか確認
-      const failedUploads = uploadResults.filter(result => !result.success);
-      if (failedUploads.length > 0) {
-        throw new Error(`${failedUploads.length}個の画像のアップロードに失敗しました`);
+      // 画像がある場合のみアップロード処理を実行
+      if (images.length > 0) {
+        // 1. すべての画像をAVIF形式に変換してAnkiのメディアフォルダに保存
+        const uploadPromises = images.map(image => uploadImage(image, undefined, true));
+        const uploadResults = await Promise.all(uploadPromises);
+        
+        // アップロード失敗がないか確認
+        const failedUploads = uploadResults.filter(result => !result.success);
+        if (failedUploads.length > 0) {
+          throw new Error(`${failedUploads.length}個の画像のアップロードに失敗しました`);
+        }
+        
+        // 複数の画像ファイル名をカンマ区切りで連結
+        imageFilenames = uploadResults.map(result => result.filename).join(',');
       }
       
       // 2. ノートのフィールドを更新
-      // 複数の画像ファイル名をカンマ区切りで連結
-      const imageFilenames = uploadResults.map(result => result.filename).join(',');
       
       // 解答時間を含めたメモを作成
       let memoWithTime = memo;
@@ -458,7 +492,7 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
           return `<img src="${filename}"`;
         }
         // 相対パスの場合はメディアサーバーのURLを追加
-        return `<img src="${mediaServerUrl}/media/${filename}"`;
+        return `<img src="${mediaServerUrl}/${filename}"`;
       }
     );
   };
@@ -770,23 +804,38 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
               )}
               
               {/* 保存ボタン */}
-              <button
-                className="btn btn-primary w-full flex items-center justify-center"
-                onClick={handleSave}
-                disabled={images.length === 0 || saving || isMediaLoading || saveSuccess}
-              >
-                {saving ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                    保存中...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    解答を保存
-                  </>
-                )}
-              </button>
+              {(() => {
+                // 保存する内容があるかどうかのフラグ
+                const hasContentToSave = images.length > 0 || memo.trim() !== '' || solvingTime !== '';
+                // ボタンを無効化する条件を決定
+                const isButtonDisabled = 
+                  isLoading ||             // ノートデータロード中
+                  !problemData ||          // ノートデータ未取得
+                  !hasContentToSave ||     // 保存する内容がない
+                  saving ||                // 保存処理中
+                  isMediaLoading ||        // 画像アップロード中
+                  saveSuccess;             // 保存成功直後
+
+                return (
+                  <button
+                    className="btn btn-primary w-full flex items-center justify-center"
+                    onClick={handleSave}
+                    disabled={isButtonDisabled}
+                  >
+                    {saving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                        保存中...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        解答を保存
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           )}
           
@@ -863,56 +912,20 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
               
               
               {/* 過去の解答用紙 - 表示/非表示切り替え可能 */}
-              {showAnswer && problemData.noteInfo?.fields?.裏面?.value && (
+              {showAnswer && (
                 <div className="mb-4">
                   <div className="flex justify-between items-center mb-2">
                     <div className="text-sm text-gray-500">過去の解答用紙</div>
-                    <div className="flex items-center">
-                      <Calendar className="w-4 h-4 mr-1 text-gray-500" />
-                      <span className="text-sm text-gray-500 mr-2">日付:</span>
-                    </div>
                   </div>
                   
-                  {/* 日付選択ボタン */}
-                  {(() => {
-                    const entries = extractAnswerEntries(problemData.noteInfo.fields.裏面.value);
-                    if (entries.length === 0) {
-                      return <div className="p-3 bg-gray-50 rounded border text-gray-500">過去の解答はありません</div>;
-                    }
-                    
-                    return (
-                      <>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {entries.map((entry, index) => (
-                            <button
-                              key={index}
-                              className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                                selectedAnswerDate === entry.date
-                                  ? 'bg-blue-500 text-white'
-                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                              }`}
-                              onClick={() => setSelectedAnswerDate(entry.date)}
-                            >
-                              {entry.date}
-                            </button>
-                          ))}
-                        </div>
-                        
-                        {/* 選択した日付の解答エントリを表示 */}
-                        {selectedAnswerDate && (
-                          <div className="p-3 bg-gray-50 rounded border">
-                            {entries
-                              .filter(entry => entry.date === selectedAnswerDate)
-                              .map((entry, index) => (
-                                <div key={index} dangerouslySetInnerHTML={{ 
-                                  __html: processHtml(entry.content)
-                                }} />
-                              ))}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
+                  {/* 過去解答フィールドの内容を表示 */}
+                  {problemData.noteInfo?.fields?.過去解答?.value ? (
+                    <div className="p-3 bg-gray-50 rounded border" dangerouslySetInnerHTML={{ 
+                      __html: processHtml(problemData.noteInfo.fields.過去解答.value)
+                    }} />
+                  ) : (
+                    <div className="p-3 bg-gray-50 rounded border text-gray-500">過去の解答はありません</div>
+                  )}
                 </div>
               )}
             </div>

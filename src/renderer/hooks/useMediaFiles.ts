@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
-import { ankiConnectService } from '../services/ankiConnectService';
+import { useState, useCallback } from 'react';
 
-// Electronのコンテキスト分離を回避するための方法
-// @ts-ignore
-const ipcRenderer = window.require ? window.require('electron').ipcRenderer : null;
+// AVIF変換のデフォルト品質
+const DEFAULT_AVIF_QUALITY = 80;
+
+// メディアサーバーのURL
+const MEDIA_SERVER_URL = '/media'; // プロキシ経由でアクセス
 
 /**
  * メディアファイル関連の機能を提供するフック
@@ -11,26 +12,6 @@ const ipcRenderer = window.require ? window.require('electron').ipcRenderer : nu
 export function useMediaFiles() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [mediaServerUrl, setMediaServerUrl] = useState<string | null>(null);
-
-  // メディアサーバーのURLを取得
-  useEffect(() => {
-    const getMediaServerUrl = async () => {
-      if (!ipcRenderer) {
-        console.error('ipcRenderer is not available');
-        return;
-      }
-      
-      try {
-        const url = await ipcRenderer.invoke('get-media-server-url');
-        setMediaServerUrl(url);
-      } catch (err) {
-        console.error('Failed to get media server URL:', err);
-      }
-    };
-
-    getMediaServerUrl();
-  }, []);
 
   /**
    * 画像ファイルをBase64エンコードする
@@ -59,11 +40,51 @@ export function useMediaFiles() {
   }, []);
 
   /**
+   * 画像をAVIF形式に変換する
+   * @param base64Data Base64エンコードされた画像データ
+   * @param quality 品質（1-100）
+   */
+  const convertToAvif = useCallback(async (base64Data: string, quality: number = DEFAULT_AVIF_QUALITY) => {
+    try {
+      const response = await fetch('/api/image/convert-to-avif', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          base64Data,
+          quality
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'AVIF変換に失敗しました');
+      }
+      
+      return result.data;
+    } catch (error) {
+      console.error('AVIF conversion error:', error);
+      throw error;
+    }
+  }, []);
+
+  /**
    * 画像ファイルをAnkiのメディアフォルダにアップロードする
    * @param file 画像ファイル
    * @param filename カスタムファイル名（省略時はファイルの元の名前を使用）
+   * @param convertToAvifFormat AVIFに変換するかどうか（デフォルト: true）
    */
-  const uploadImage = useCallback(async (file: File, filename?: string) => {
+  const uploadImage = useCallback(async (
+    file: File, 
+    filename?: string, 
+    convertToAvifFormat: boolean = true
+  ) => {
     setIsLoading(true);
     setError(null);
     
@@ -71,24 +92,35 @@ export function useMediaFiles() {
       // ファイル名を決定（カスタム名または元のファイル名）
       const finalFilename = filename || file.name;
       
-      // タイムスタンプを追加してユニークなファイル名にする
-      const timestamp = new Date().getTime();
-      const extension = finalFilename.split('.').pop() || 'png';
-      const uniqueFilename = `answer_${timestamp}.${extension}`;
-      
       // 画像をBase64エンコード
       const base64Data = await encodeImageToBase64(file);
       
-      // AnkiConnectを使用してアップロード
-      const success = await ankiConnectService.storeMediaFile(uniqueFilename, base64Data);
+      // サーバーAPIを使用してアップロード
+      const response = await fetch('/api/image/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          base64Data,
+          filename: finalFilename,
+          convertToAvif: convertToAvifFormat
+        })
+      });
       
-      if (!success) {
-        throw new Error('画像のアップロードに失敗しました');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || '画像のアップロードに失敗しました');
       }
       
       return {
-        filename: uniqueFilename,
-        success
+        filename: result.filename,
+        success: true
       };
     } catch (err) {
       setError(err instanceof Error ? err : new Error('画像のアップロードに失敗しました'));
@@ -110,21 +142,15 @@ export function useMediaFiles() {
     setError(null);
     
     try {
-      // メディアサーバーが利用可能な場合はそちらを使用
-      if (mediaServerUrl) {
-        return `${mediaServerUrl}/media/${filename}`;
-      }
-      
-      // フォールバック: 直接AnkiConnectから取得
-      const base64Data = await ankiConnectService.retrieveMediaFile(filename);
-      return `data:image/png;base64,${base64Data}`;
+      // メディアサーバーURLを使用
+      return `${MEDIA_SERVER_URL}/${filename}`;
     } catch (err) {
       setError(err instanceof Error ? err : new Error('画像の取得に失敗しました'));
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, [mediaServerUrl]);
+  }, []);
 
   /**
    * ドラッグ&ドロップされたファイルを処理する
@@ -146,16 +172,19 @@ export function useMediaFiles() {
    * メディアキャッシュをクリアする
    */
   const clearMediaCache = useCallback(async () => {
-    if (!ipcRenderer) {
-      console.error('ipcRenderer is not available');
-      return false;
-    }
-    
     try {
-      await ipcRenderer.invoke('clear-media-cache');
-      return true;
-    } catch (err) {
-      console.error('Failed to clear media cache:', err);
+      const response = await fetch('/api/clear-cache', {
+        method: 'POST'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      return result.success;
+    } catch (error) {
+      console.error('Failed to clear media cache:', error);
       return false;
     }
   }, []);
@@ -164,10 +193,10 @@ export function useMediaFiles() {
     isLoading,
     error,
     encodeImageToBase64,
+    convertToAvif,
     uploadImage,
     retrieveImage,
     handleFileDrop,
-    clearMediaCache,
-    mediaServerUrl
+    clearMediaCache
   };
 }

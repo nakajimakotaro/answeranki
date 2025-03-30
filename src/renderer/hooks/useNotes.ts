@@ -2,15 +2,6 @@ import { useState, useCallback } from 'react';
 import { ankiConnectService } from '../services/ankiConnectService';
 import { NoteInfo } from '../types/ankiConnect';
 
-// 現在表示中のカード情報の型
-interface CurrentCard {
-  cardId: number;
-  noteId: number;
-  deckName: string;
-  question: string;
-  answer: string;
-}
-
 /**
  * ノート関連の機能を提供するフック
  */
@@ -145,14 +136,31 @@ export function useNotes() {
       const dateStr = now.toLocaleDateString('ja-JP');
       const timeStr = now.toLocaleTimeString('ja-JP');
       
-      // 画像ファイル名がカンマ区切りの場合は複数の画像として処理
-      const imageFilenames = imageFilename.split(',');
-      
-      // 画像タグを生成
-      const imageTags = imageFilenames.map(filename => `<img src="${filename}" class="mb-2">`).join('');
+      let imageTags = '';
+      // 画像ファイル名が存在する場合のみ画像タグを生成
+      if (imageFilename) {
+        // 画像ファイル名がカンマ区切りの場合は複数の画像として処理
+        const imageFilenames = imageFilename.split(',');
+        // 画像タグを生成
+        imageTags = imageFilenames.map(filename => `<img src="${filename}" class="mb-2">`).join('');
+      }
       
       // 新しい解答を追加
-      const newContent = `${currentField}<hr><div class="answer-entry"><p><strong>${dateStr} ${timeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
+      let newContent;
+      
+      // フィールド名が '過去解答' の場合は特別な処理
+      if (fieldName === '過去解答') {
+        // 過去解答フィールドが存在しない場合は新規作成
+        if (!currentNote.fields[fieldName]) {
+          newContent = `<div class="answer-entry"><p><strong>${dateStr} ${timeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
+        } else {
+          // 既存の過去解答フィールドに追加
+          newContent = `${currentField}<hr><div class="answer-entry"><p><strong>${dateStr} ${timeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
+        }
+      } else {
+        // 通常の裏面フィールドに追加
+        newContent = `${currentField}<hr><div class="answer-entry"><p><strong>${dateStr} ${timeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
+      }
       
       // フィールドを更新
       const fields: Record<string, string> = {
@@ -206,26 +214,23 @@ export function useNotes() {
       
       // noteIdが存在する場合のみノート情報を取得
       if (currentCard.noteId) {
-        try {
-          const noteInfo = await ankiConnectService.getNotesInfo([currentCard.noteId]);
+        const noteInfo = await ankiConnectService.getNotesInfo([currentCard.noteId]);
+        
+        if (noteInfo.length > 0) {
+          // 現在のノートリストを更新
+          setNotes([noteInfo[0]]);
           
-          if (noteInfo.length > 0) {
-            // 現在のノートリストを更新
-            setNotes([noteInfo[0]]);
-            
-            return {
-              ...currentCard,
-              noteInfo: noteInfo[0]
-            };
-          }
-        } catch (noteErr) {
-          console.error('Failed to get note info:', noteErr);
+          return {
+            ...currentCard,
+            noteInfo: noteInfo[0]
+          };
         }
       }
       
       // ノート情報が取得できなかった場合は、カード情報のみを返す
       return currentCard;
     } catch (err) {
+      console.error('Failed to get card or note info:', err);
       setError(err instanceof Error ? err : new Error('現在のカード情報の取得に失敗しました'));
       return null;
     } finally {

@@ -1,26 +1,36 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw, AlertCircle, Search, Tag, Book } from 'lucide-react';
-import { useNotes, useAnkiConnect, useDecks, useMediaFiles } from '../hooks';
-import { NoteInfo } from '../types/ankiConnect';
+import { useNotes, useAnkiConnect, useDecks } from '../hooks';
 
 const ProblemList = () => {
   const { isConnected, testConnection } = useAnkiConnect();
   const { decks, isLoading: isLoadingDecks, error: decksError, fetchDecks } = useDecks();
   const { notes, isLoading: isLoadingNotes, error: notesError, fetchNotesByQuery } = useNotes();
-  const { mediaServerUrl } = useMediaFiles();
   
   const [selectedDeck, setSelectedDeck] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [connectionChecked, setConnectionChecked] = useState(false);
   const [currentProblemTag, setCurrentProblemTag] = useState('current');
 
-  // 設定を読み込む
+  // 設定と前回の状態を読み込む
   useEffect(() => {
+    // 現在の問題タグの設定を読み込む
     const savedCurrentProblemTag = localStorage.getItem('currentProblemTag');
-    
     if (savedCurrentProblemTag) {
       setCurrentProblemTag(savedCurrentProblemTag);
+    }
+    
+    // 前回選択したデッキを復元
+    const savedSelectedDeck = localStorage.getItem('problemList_selectedDeck');
+    if (savedSelectedDeck) {
+      setSelectedDeck(savedSelectedDeck);
+    }
+    
+    // 前回の検索クエリを復元
+    const savedSearchQuery = localStorage.getItem('problemList_searchQuery');
+    if (savedSearchQuery) {
+      setSearchQuery(savedSearchQuery);
     }
   }, []);
 
@@ -34,16 +44,32 @@ const ProblemList = () => {
     checkConnection();
   }, [testConnection]);
 
-  // 接続が確立されたらデッキリストを取得
+  // 接続が確立されたらデッキリストを取得し、前回の状態を復元する
   useEffect(() => {
     if (isConnected) {
-      fetchDecks();
+      fetchDecks().then(() => {
+        // デッキリストが取得できたら、前回選択したデッキのノートを再取得
+        if (selectedDeck) {
+          const query = `deck:"${selectedDeck}"`;
+          // 検索クエリがある場合は、それも含める
+          if (searchQuery.trim()) {
+            fetchNotesByQuery(`${query} ${searchQuery}`);
+          } else {
+            fetchNotesByQuery(query);
+          }
+        } else if (searchQuery.trim()) {
+          // デッキが選択されていないが検索クエリがある場合
+          fetchNotesByQuery(searchQuery);
+        }
+      });
     }
-  }, [isConnected, fetchDecks]);
+  }, [isConnected, fetchDecks, selectedDeck, searchQuery]);
 
   // デッキを選択したときの処理
   const handleDeckSelect = async (deckName: string) => {
     setSelectedDeck(deckName);
+    // 選択したデッキをlocalStorageに保存
+    localStorage.setItem('problemList_selectedDeck', deckName);
     
     // デッキに属するノートを検索
     const query = `deck:"${deckName}"`;
@@ -52,6 +78,9 @@ const ProblemList = () => {
 
   // 検索処理
   const handleSearch = async () => {
+    // 検索クエリをlocalStorageに保存
+    localStorage.setItem('problemList_searchQuery', searchQuery);
+    
     if (!searchQuery.trim()) {
       if (selectedDeck) {
         // 検索クエリが空の場合は、選択中のデッキのノートを再取得
@@ -192,7 +221,7 @@ const ProblemList = () => {
           </div>
         ) : notes.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {notes.map((note) => {
+            {notes.map((note, index) => {
               // フィールド名を取得（最初のフィールドを表示用に使用）
               const fieldNames = Object.keys(note.fields);
               const firstFieldName = fieldNames[0] || '';
@@ -201,11 +230,15 @@ const ProblemList = () => {
               // HTMLタグを除去してプレーンテキストを取得
               const plainText = stripHtml(firstFieldValue);
               
-              // 現在の問題タグを持っているか確認
-              const hasCurrentTag = note.tags.includes(currentProblemTag);
-              
               return (
-                <div key={note.noteId} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                <Link 
+                  key={note.noteId} 
+                  to={`/problem/${note.noteId}`}
+                  className="border rounded-lg p-4 pt-6 hover:shadow-md transition-shadow relative block cursor-pointer"
+                >
+                  <div className="absolute top-0 left-0 bg-primary text-white px-2 py-0.5 text-xs font-bold rounded-tl-lg">
+                    問{index + 1}
+                  </div>
                   <div className="mb-2 font-medium truncate" title={plainText}>
                     {plainText.length > 50 ? plainText.substring(0, 50) + '...' : plainText}
                   </div>
@@ -224,14 +257,11 @@ const ProblemList = () => {
                         </span>
                       ))}
                     </div>
-                    <Link 
-                      to={`/problem/${note.noteId}`} 
-                      className="text-primary hover:underline text-sm"
-                    >
+                    <span className="text-primary text-sm">
                       詳細
-                    </Link>
+                    </span>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>

@@ -1,65 +1,102 @@
-# Answer2Anki
+# AnswerAnki
+
+Anki学習カードの解答を管理するためのウェブアプリケーション。
 
 ## 概要
 
-Answer2Ankiは、Ankiと連携し、問題演習とその解答（特に手書きの解答用紙）を効率的に管理するためのElectronアプリケーションです。AnkiConnectアドオンを利用してAnkiと通信します。
+AnswerAnkiは、Ankiのカードに対する解答をスキャンして保存し、過去の解答を簡単に参照できるようにするアプリケーションです。ScanSnapスキャナーと連携して、解答用紙を直接取り込むことができます。
 
-## 主な機能
+## 機能
 
-*   Ankiデッキから問題（ノート）を取得して表示します。
-*   問題に対応する解答用紙（画像ファイル）をAnkiカードの裏面フィールドに関連付けて保存・表示します。
-*   ノートのリスト表示、検索（将来的に実装予定）。
-*   AnkiConnectへの接続設定とテスト。
+- Ankiカードの表示と検索
+- ScanSnapスキャナーからの解答用紙の取り込み
+- 解答画像のAVIF形式への変換と保存
+- 解答時間の記録
+- 過去の解答履歴の表示
 
-## 使用技術
+## システム要件
 
-*   [Electron](https://www.electronjs.org/)
-*   [React](https://reactjs.org/)
-*   [TypeScript](https://www.typescriptlang.org/)
-*   [Vite](https://vitejs.dev/)
-*   [Tailwind CSS](https://tailwindcss.com/)
-*   [AnkiConnect API](https://github.com/FooSoft/anki-connect)
+- Node.js 18.0以上
+- Anki（AnkiConnectプラグインがインストールされていること）
+- ScanSnap（オプション、スキャナー機能を使用する場合）
 
-## セットアップ手順
+## インストール
 
-### 前提条件
+1. リポジトリをクローン：
 
-*   [Anki](https://apps.ankiweb.net/) がインストールされ、起動していること。
-*   [AnkiConnect](https://ankiweb.net/shared/info/2055492159) アドオンがAnkiにインストールされ、有効になっていること。
+```bash
+git clone https://github.com/yourusername/answeranki.git
+cd answeranki
+```
 
-### インストールと起動
+2. フロントエンドの依存関係をインストール：
 
-1.  **リポジトリをクローン:**
-    ```bash
-    git clone <リポジトリURL>
-    cd answer2anki
-    ```
+```bash
+npm install
+```
 
-2.  **依存関係をインストール:**
-    ```bash
-    npm install
-    ```
+3. サーバーの依存関係をインストール：
 
-3.  **開発環境で起動:**
-    ```bash
-    npm run dev
-    ```
-    これにより、Electronアプリケーションが開発モードで起動します。
+```bash
+cd server
+npm install
+cd ..
+```
 
-4.  **ビルド (配布用):**
-    ```bash
-    npm run build
-    ```
-    ビルドされたアプリケーションは `dist` ディレクトリに出力されます。
+## 使い方
 
-## 使い方 (概要)
+### 開発モード
 
-1.  アプリケーションを起動します。
-2.  必要に応じて設定画面でAnkiConnectの接続を確認します。
-3.  サイドバーからデッキを選択し、問題リストを表示します。
-4.  問題を選択すると、表面（問題文）が表示されます。
-5.  解答用紙の画像をアップロードすると、Ankiカードの裏面に関連付けられます。
+1. サーバーとフロントエンドを同時に起動：
+
+```bash
+npm run dev:all
+```
+
+または、別々のターミナルで起動：
+
+```bash
+# サーバー
+npm run server:dev
+
+# フロントエンド
+npm run dev
+```
+
+2. ブラウザで http://localhost:5173 にアクセス
+
+### 本番モード
+
+1. ビルド：
+
+```bash
+# フロントエンドをビルド
+npm run build
+
+# サーバーをビルド
+npm run server:build
+```
+
+2. 起動：
+
+```bash
+npm start
+```
+
+3. ブラウザで http://localhost:3000 にアクセス
+
+## 設定
+
+- Ankiは起動し、AnkiConnectプラグインが有効になっている必要があります
+- ScanSnapスキャナーを使用する場合は、ScanSnap Web SDKがインストールされている必要があります
+
+## 技術スタック
+
+- フロントエンド：React、TypeScript、Tailwind CSS
+- バックエンド：Node.js、Express
+- 画像処理：Sharp（AVIF変換）
+- 外部連携：AnkiConnect API、ScanSnap Web SDK
 
 ## ライセンス
 
-MIT License
+MIT
