@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Scan, Maximize, XCircle, Play, Pause, StopCircle, Clock } from 'lucide-react';
 import { useNotes, useAnkiConnect, useMediaFiles } from '../hooks';
+import MockExamScoresList from './MockExamScoresList';
 import { NoteInfo } from '../types/ankiConnect';
 import scansnap, { COLOR_MODE, COMPRESSION, FORMAT, SCAN_MODE, SCANNING_SIDE } from '../../scansnap';
 import { nanoid } from 'nanoid';
@@ -927,6 +928,11 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                     <div className="p-3 bg-gray-50 rounded border text-gray-500">過去の解答はありません</div>
                   )}
                 </div>
+              )}
+              
+              {/* 模試の点数 */}
+              {showAnswer && problemData.noteId && (
+                <MockExamScoresList noteId={problemData.noteId} />
               )}
             </div>
           )}

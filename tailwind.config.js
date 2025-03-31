@@ -17,6 +17,9 @@ export default {
         warning: '#f59e0b',
         info: '#3b82f6',
       },
+      gridTemplateColumns: {
+        '53': 'repeat(53, minmax(0, 1fr))',
+      },
       fontFamily: {
         sans: ['Noto Sans JP', 'sans-serif'],
         mono: ['Fira Code', 'monospace'],

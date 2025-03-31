@@ -5,6 +5,10 @@ import { fileURLToPath } from 'url';
 import { setupMediaRoutes } from './services/mediaServer.js';
 import { setupAnkiConnectProxy } from './services/ankiConnectProxy.js';
 import { setupImageProcessing } from './services/imageProcessing.js';
+import { initDatabase } from './db/database.js';
+import { runMigrations } from './db/migrate.js';
+import scheduleApiRouter from './routes/scheduleApi.js';
+import { setupMockExamApi } from './routes/mockExamApi.js';
 
 // ES modules compatibility
 const __filename = fileURLToPath(import.meta.url);
@@ -22,6 +26,14 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Initialize database and run migrations
+initDatabase()
+  .then(() => runMigrations())
+  .catch(err => {
+    console.error('Failed to initialize database or run migrations:', err);
+    process.exit(1);
+  });
+
 // Serve static files from the React app
 app.use(express.static(CLIENT_BUILD_PATH));
 
@@ -29,6 +41,12 @@ app.use(express.static(CLIENT_BUILD_PATH));
 setupAnkiConnectProxy(app);
 setupImageProcessing(app);
 setupMediaRoutes(app); // Add media routes to the main server
+
+// Add schedule API routes
+app.use('/api/schedule', scheduleApiRouter);
+
+// Set up mock exam API routes
+setupMockExamApi(app);
 
 // Catch-all route to serve the React app
 app.get('*', (req, res) => {
