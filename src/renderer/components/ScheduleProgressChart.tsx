@@ -379,12 +379,30 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
                     
                     {/* 実際の進捗線 */}
                     {progressData.cumulativeData && progressData.cumulativeData.length > 0 && (
-                      <svg className="w-full h-full">
+                      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                           points={progressData.cumulativeData.map((point: any, index: number) => {
-                            const x = (index / (progressData.cumulativeData.length - 1)) * 100;
-                            const y = 100 - (point.actual / progressData.totalProblems) * 100;
-                            return `${x}%,${y}%`;
+                            // Handle division by zero for x coordinate
+                            const numPoints = progressData.cumulativeData.length;
+                            const x = numPoints > 1 
+                              ? (index / (numPoints - 1)) * 100 
+                              : 0; // If only one point, place it at the start (0%)
+                            
+                            // Handle division by zero for y coordinate
+                            const y = progressData.totalProblems > 0
+                              ? 100 - (point.actual / progressData.totalProblems) * 100
+                              : 100; // If totalProblems is 0, y is 100% (bottom of the graph)
+                              
+                            // Ensure x and y are valid finite numbers before returning the string
+                            const finalX = Number.isFinite(x) ? x : 0;
+                            const finalY = Number.isFinite(y) ? y : 100; // Default to bottom if y is not finite
+                            
+                            // Round to avoid overly long decimals (optional but can help)
+                            const roundedX = finalX.toFixed(2);
+                            const roundedY = finalY.toFixed(2);
+
+                            // Return plain numbers, not percentages, for the points attribute
+                            return `${roundedX},${roundedY}`; 
                           }).join(' ')}
                           fill="none"
                           stroke="#3b82f6"

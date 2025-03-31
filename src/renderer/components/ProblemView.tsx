@@ -73,6 +73,8 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   
   // 解答時間入力用の状態
   const [solvingTime, setSolvingTime] = useState('');
+  // 復習時間入力用の状態
+  const [reviewTime, setReviewTime] = useState('');
 
   // タイマー機能
   const startTimer = () => {
@@ -393,9 +395,9 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
       setSaveError('カード情報が取得できていません');
       return;
     }
-    // 画像もメモ(空白以外)も解答時間もない場合は保存しない
-    if (images.length === 0 && !memo.trim() && !solvingTime) {
-      setSaveError('保存する内容（画像、メモ、または解答時間）がありません');
+    // 画像、メモ(空白以外)、解答時間、復習時間のいずれもない場合は保存しない
+    if (images.length === 0 && !memo.trim() && !solvingTime && !reviewTime) {
+      setSaveError('保存する内容（画像、メモ、解答時間、または復習時間）がありません');
       return;
     }
     
@@ -423,10 +425,19 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
       
       // 2. ノートのフィールドを更新
       
-      // 解答時間を含めたメモを作成
-      let memoWithTime = memo;
+      // 解答時間と復習時間を含めたメモを作成
+      let timeInfo = '';
       if (solvingTime) {
-        memoWithTime = `【解答時間: ${solvingTime}】\n${memo}`;
+        timeInfo += `【解答時間: ${solvingTime}】`;
+      }
+      if (reviewTime) {
+        if (timeInfo) timeInfo += ' '; // Add space if both times exist
+        timeInfo += `【復習時間: ${reviewTime}】`;
+      }
+      
+      let memoWithTime = memo;
+      if (timeInfo) {
+        memoWithTime = `${timeInfo}\n${memo}`;
       }
       
       const success = await addAnswerToNote(
@@ -452,6 +463,7 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
         setImages([]);
         setImagePreviews([]);
         setSolvingTime('');
+        setReviewTime(''); // Reset review time
         resetTimer();
         
         // コンポーネントアンマウント時にタイマーをクリア
@@ -660,6 +672,25 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                 </p>
               </div>
               
+              {/* 復習時間入力フィールド */}
+              <div className="mb-4">
+                <label htmlFor="review-time" className="block text-sm font-medium text-gray-700 mb-1">
+                  復習時間（分:秒）
+                </label>
+                <div className="flex items-center">
+                  <input
+                    id="review-time"
+                    type="text"
+                    className="w-24 p-2 border border-gray-300 rounded-md mr-2"
+                    placeholder="0:00"
+                    value={reviewTime}
+                    onChange={(e) => setReviewTime(e.target.value)}
+                    pattern="[0-9]+:[0-5][0-9]"
+                  />
+                  <span className="text-gray-600">（分:秒）</span>
+                </div>
+              </div>
+              
               {/* スキャナーエラー表示 */}
               {scannerError && renderError(scannerError)}
               
@@ -807,7 +838,7 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
               {/* 保存ボタン */}
               {(() => {
                 // 保存する内容があるかどうかのフラグ
-                const hasContentToSave = images.length > 0 || memo.trim() !== '' || solvingTime !== '';
+                const hasContentToSave = images.length > 0 || memo.trim() !== '' || solvingTime !== '' || reviewTime !== '';
                 // ボタンを無効化する条件を決定
                 const isButtonDisabled = 
                   isLoading ||             // ノートデータロード中
