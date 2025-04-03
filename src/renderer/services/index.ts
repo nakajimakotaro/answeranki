@@ -1,2 +1,2 @@
 export * from './ankiConnectService';
-export * from './mockExamService';
+export * from './examService';

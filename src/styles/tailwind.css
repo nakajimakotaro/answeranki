@@ -61,4 +61,20 @@
   .card {
     @apply bg-white rounded-lg shadow p-6;
   }
+  
+  /* タスクタイプ別のスタイル */
+  .task-schedule .bar {
+    fill: #4285f4 !important;
+    stroke: #2a56c6 !important;
+  }
+  
+  .task-exam .bar {
+    fill: #ea4335 !important;
+    stroke: #b31412 !important;
+  }
+  
+  .task-mock-exam .bar {
+    fill: #fbbc05 !important;
+    stroke: #c26401 !important;
+  }
 }

@@ -43,8 +43,6 @@ export const setupMediaRoutes = (app: Express): void => {
       return;
     }
     
-    console.log(`Media request: ${filename}`);
-    
     try {
       // Check if file is in cache
       if (mediaCache[filename]) {

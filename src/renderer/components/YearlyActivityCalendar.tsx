@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { getYear, getDaysInYear, startOfYear, getDay, addDays, format, getDate, getMonth, parseISO } from 'date-fns'; // Import date-fns functions
 import { scheduleService, YearlyLogData } from '../services/scheduleService';
 import { Calendar, BookOpen, Filter, BarChart2 } from 'lucide-react';
 
@@ -13,7 +14,7 @@ interface YearlyActivityCalendarProps {
  * GitHub風の年間アクティビティカレンダー（草）コンポーネント
  */
 const YearlyActivityCalendar = ({
-  year = new Date().getFullYear(),
+  year = getYear(new Date()), // Use getYear for default year
   initialFilterType = 'all',
   initialFilterId,
   initialFilterSubject
@@ -63,24 +64,25 @@ const YearlyActivityCalendar = ({
       weeks: [],
       maxAmount: 0
     };
-    
+
     const year = selectedYear;
-    const daysInYear = new Date(year, 11, 31).getDate() === 31 ? 365 : 366;
-    const firstDayOfYear = new Date(year, 0, 1).getDay(); // 0 = 日曜日, 1 = 月曜日, ...
-    
-    // 年間の全日付を生成
+    const yearStartDate = startOfYear(new Date(year, 0, 1)); // Get start of the year using date-fns
+    const daysInYear = getDaysInYear(yearStartDate); // Get days in the year using date-fns
+    const firstDayOfYear = getDay(yearStartDate); // Get day of the week (0-6) using date-fns
+
+    // 年間の全日付を生成 (date-fns を使用)
     const allDays = Array.from({ length: daysInYear }, (_, i) => {
-      const date = new Date(year, 0, i + 1);
-      const dateString = date.toISOString().split('T')[0];
-      
+      const date = addDays(yearStartDate, i); // Calculate each day using addDays
+      const dateString = format(date, 'yyyy-MM-dd'); // Format date string using date-fns
+
       // ログデータから該当日の学習量を取得
       const logEntry = yearlyData.logs.find(log => log.date === dateString);
       
       return {
         date: dateString,
-        day: date.getDate(),
-        month: date.getMonth(),
-        dayOfWeek: date.getDay(),
+        day: getDate(date), // Use getDate from date-fns
+        month: getMonth(date), // Use getMonth from date-fns
+        dayOfWeek: getDay(date), // Use getDay from date-fns
         amount: logEntry ? logEntry.total_amount : 0
       };
     });
@@ -195,7 +197,7 @@ const YearlyActivityCalendar = ({
           </button>
           <button
             className="px-3 py-1 bg-primary text-white rounded hover:bg-primary-dark"
-            onClick={() => setSelectedYear(new Date().getFullYear())}
+            onClick={() => setSelectedYear(getYear(new Date()))} // Use getYear
           >
             今年
           </button>

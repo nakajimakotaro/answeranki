@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react';
+import { format, parseISO, isValid } from 'date-fns'; // Import date-fns functions
 import { AlertCircle, FileCheck, RefreshCw } from 'lucide-react';
-import { useMockExams } from '../hooks';
-import { MockExamScore } from '../services/mockExamService';
+import { useExams } from '../hooks'; // Changed from useMockExams
+import { ExamScore } from '../types/exam'; // Corrected type name to ExamScore
+
+// Define a more accurate type for the data structure in noteExamScores
+interface NoteExamScoreData extends ExamScore {
+  name: string; // Name from the related Exam object
+  date: string; // Date from the related Exam object
+}
 
 interface MockExamScoresListProps {
   noteId: number;
@@ -11,23 +18,28 @@ interface MockExamScoresListProps {
  * 特定のノートの模試点数を表示するコンポーネント
  */
 const MockExamScoresList = ({ noteId }: MockExamScoresListProps) => {
-  const { noteScores, isLoading, error, fetchNoteScores } = useMockExams();
+  // Use the new state and fetch function from useExams
+  const { noteExamScores, isLoading, error, fetchNoteExamScores } = useExams(); 
   
   // 初期データ読み込み
   useEffect(() => {
     if (noteId) {
-      fetchNoteScores(noteId);
+      fetchNoteExamScores(noteId); // Use the correct fetch function
     }
-  }, [noteId, fetchNoteScores]);
+  }, [noteId, fetchNoteExamScores]); // Update dependency array
   
-  // 日付をフォーマット
+  // 日付をフォーマット (date-fns を使用)
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    try {
+      const date = parseISO(dateString); // Assume 'yyyy-MM-dd' format
+      if (!isValid(date)) {
+        return '無効な日付';
+      }
+      return format(date, 'yyyy年M月d日');
+    } catch (e) {
+      console.error("Error formatting date:", dateString, e);
+      return '日付エラー';
+    }
   };
   
   // エラーメッセージを表示
@@ -53,7 +65,7 @@ const MockExamScoresList = ({ noteId }: MockExamScoresListProps) => {
           模試の点数
         </div>
         <button
-          onClick={() => fetchNoteScores(noteId)}
+          onClick={() => fetchNoteExamScores(noteId)} // Use the correct fetch function
           className="text-xs text-gray-500 flex items-center hover:text-gray-700"
           title="更新"
         >
@@ -69,7 +81,7 @@ const MockExamScoresList = ({ noteId }: MockExamScoresListProps) => {
           <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-gray-500 mx-auto mb-2"></div>
           <p>模試データを読み込み中...</p>
         </div>
-      ) : noteScores.length > 0 ? (
+      ) : noteExamScores.length > 0 ? ( // Use the correct state variable
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white border">
             <thead>
@@ -83,10 +95,12 @@ const MockExamScoresList = ({ noteId }: MockExamScoresListProps) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {noteScores.map((score: MockExamScore) => (
+              {/* Use the correct state variable and the more accurate type */}
+              {noteExamScores.map((score: NoteExamScoreData) => ( // Use the combined type
                 <tr key={score.id}>
-                  <td className="py-2 px-3 whitespace-nowrap">{score.mock_exam_name}</td>
-                  <td className="py-2 px-3 whitespace-nowrap">{score.mock_exam_date ? formatDate(score.mock_exam_date) : '-'}</td>
+                  {/* Use the correct property names 'name' and 'date' */}
+                  <td className="py-2 px-3 whitespace-nowrap">{score.name}</td>
+                  <td className="py-2 px-3 whitespace-nowrap">{score.date ? formatDate(score.date) : '-'}</td>
                   <td className="py-2 px-3 whitespace-nowrap">{score.descriptive_score !== undefined ? score.descriptive_score : '-'}</td>
                   <td className="py-2 px-3 whitespace-nowrap">{score.multiple_choice_score !== undefined ? score.multiple_choice_score : '-'}</td>
                   <td className="py-2 px-3 whitespace-nowrap">{score.total_score !== undefined ? score.total_score : '-'}</td>

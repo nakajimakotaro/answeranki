@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { parse, compareDesc, isValid } from 'date-fns'; // Import date-fns functions
 import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Scan, Maximize, XCircle, Play, Pause, StopCircle, Clock } from 'lucide-react';
 import { useNotes, useAnkiConnect, useMediaFiles } from '../hooks';
 import MockExamScoresList from './MockExamScoresList';
@@ -334,12 +335,18 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
       }
     }
     
-    // 新しい順に並べ替え
+    // 新しい順に並べ替え (date-fns を使用)
     return entries.sort((a, b) => {
-      // 日付文字列をDate型に変換して比較
-      const dateA = new Date(a.date.replace(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+):(\d+)/, '$3-$1-$2T$4:$5:$6'));
-      const dateB = new Date(b.date.replace(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+):(\d+)/, '$3-$1-$2T$4:$5:$6'));
-      return dateB.getTime() - dateA.getTime();
+      // 'yyyy/MM/dd HH:mm:ss' 形式の文字列をパース
+      const dateA = parse(a.date, 'yyyy/MM/dd HH:mm:ss', new Date());
+      const dateB = parse(b.date, 'yyyy/MM/dd HH:mm:ss', new Date());
+
+      // 無効な日付の場合は比較しない（またはエラー処理）
+      if (!isValid(dateA) || !isValid(dateB)) {
+        return 0;
+      }
+      // compareDesc で降順（新しい順）にソート
+      return compareDesc(dateA, dateB);
     });
   };
 

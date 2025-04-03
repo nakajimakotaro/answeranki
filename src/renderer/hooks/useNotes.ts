@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { format } from 'date-fns'; // Import format from date-fns
 import { ankiConnectService } from '../services/ankiConnectService';
 import { NoteInfo } from '../types/ankiConnect';
 
@@ -131,11 +132,10 @@ export function useNotes() {
       const currentNote = noteInfo[0];
       const currentField = currentNote.fields[fieldName]?.value || '';
       
-      // 現在の日時
+      // 現在の日時をフォーマット (date-fns を使用)
       const now = new Date();
-      const dateStr = now.toLocaleDateString('ja-JP');
-      const timeStr = now.toLocaleTimeString('ja-JP');
-      
+      const dateTimeStr = format(now, 'yyyy/MM/dd HH:mm:ss'); // Combine date and time
+
       let imageTags = '';
       // 画像ファイル名が存在する場合のみ画像タグを生成
       if (imageFilename) {
@@ -152,14 +152,14 @@ export function useNotes() {
       if (fieldName === '過去解答') {
         // 過去解答フィールドが存在しない場合は新規作成
         if (!currentNote.fields[fieldName]) {
-          newContent = `<div class="answer-entry"><p><strong>${dateStr} ${timeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
+          newContent = `<div class="answer-entry"><p><strong>${dateTimeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
         } else {
           // 既存の過去解答フィールドに追加
-          newContent = `${currentField}<hr><div class="answer-entry"><p><strong>${dateStr} ${timeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
+          newContent = `${currentField}<hr><div class="answer-entry"><p><strong>${dateTimeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
         }
       } else {
         // 通常の裏面フィールドに追加
-        newContent = `${currentField}<hr><div class="answer-entry"><p><strong>${dateStr} ${timeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
+        newContent = `${currentField}<hr><div class="answer-entry"><p><strong>${dateTimeStr}</strong></p>${imageTags}<p>${memo}</p></div>`;
       }
       
       // フィールドを更新

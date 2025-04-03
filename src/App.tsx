@@ -8,7 +8,7 @@ import Dashboard from './renderer/routes/Dashboard';
 import TextbooksPage from './renderer/routes/TextbooksPage';
 import UniversitiesPage from './renderer/routes/UniversitiesPage';
 import SchedulesPage from './renderer/routes/SchedulesPage';
-import MockExamsPage from './renderer/routes/MockExamsPage';
+import ExamsPage from './renderer/routes/ExamsPage';
 
 function App() {
   return (
@@ -22,7 +22,7 @@ function App() {
         <Route path="textbooks" element={<TextbooksPage />} />
         <Route path="universities" element={<UniversitiesPage />} />
         <Route path="schedules" element={<SchedulesPage />} />
-        <Route path="mock-exams" element={<MockExamsPage />} />
+        <Route path="exams" element={<ExamsPage />} />
         <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

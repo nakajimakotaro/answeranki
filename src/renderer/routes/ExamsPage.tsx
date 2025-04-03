@@ -1,170 +1,123 @@
 import { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Edit, 
-  Trash, 
-  Calendar, 
-  AlertCircle, 
-  RefreshCw, 
+import { format, parse, parseISO, compareAsc, compareDesc, isValid } from 'date-fns';
+import {
+  Plus,
+  Edit,
+  Trash,
+  Calendar,
+  AlertCircle,
   FileText,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Building
 } from 'lucide-react';
-import { useMockExams } from '../hooks';
-import { MockExam, CreateMockExamData, MockExamScore } from '../services/mockExamService';
-import MockExamSubjectScores from '../components/MockExamSubjectScores';
+import { useExams } from '../hooks';
+import { Exam, ExamInput, ExamFormatType } from '../types/exam';
+import ExamSubjectScores from '../components/ExamSubjectScores';
 
 /**
- * 模試管理ページ
+ * 試験管理ページ (模試・本番)
  */
-const MockExamsPage = () => {
-  const { 
-    mockExams, 
-    mockExamScores,
-    isLoading, 
-    error, 
-    fetchAllMockExams,
-    fetchMockExamScores,
-    createMockExam,
-    updateMockExam,
-    deleteMockExam,
-    addOrUpdateScore,
-    deleteScore
-  } = useMockExams();
-  
-  // 模試フォーム用の状態
+const ExamsPage = () => {
+  const {
+    exams,
+    isLoading,
+    error,
+    fetchExamScores,
+    createExam,
+    updateExam,
+    deleteExam,
+  } = useExams();
+
+  // 試験フォーム用の状態
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [selectedExam, setSelectedExam] = useState<MockExam | null>(null);
-  const [formData, setFormData] = useState<CreateMockExamData>({
+  const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
+  const [formData, setFormData] = useState<ExamInput>({
     name: '',
-    date: new Date().toISOString().split('T')[0],
+    date: format(new Date(), 'yyyy-MM-dd'),
+    is_mock: false,
     exam_type: 'descriptive',
+    university_id: null,
     notes: ''
   });
-  
+
   // 点数表示用の状態
   const [expandedExamId, setExpandedExamId] = useState<number | null>(null);
-  
-  // 点数入力フォーム用の状態
-  const [showScoreForm, setShowScoreForm] = useState(false);
-  const [scoreFormData, setScoreFormData] = useState({
-    note_id: '',
-    descriptive_score: '',
-    multiple_choice_score: '',
-    total_score: '',
-    max_score: ''
-  });
-  
-  // 初期データ読み込み
-  useEffect(() => {
-    fetchAllMockExams();
-  }, [fetchAllMockExams]);
-  
-  // 模試の展開/折りたたみ時に点数を取得
+
+  // 試験の展開/折りたたみ時に点数を取得
   useEffect(() => {
     if (expandedExamId !== null) {
-      fetchMockExamScores(expandedExamId);
+      fetchExamScores(expandedExamId); // Use renamed function
     }
-  }, [expandedExamId, fetchMockExamScores]);
-  
+  }, [expandedExamId, fetchExamScores]);
+
   // フォームリセット
   const resetForm = () => {
     setFormData({
       name: '',
-      date: new Date().toISOString().split('T')[0],
+      date: format(new Date(), 'yyyy-MM-dd'),
+      is_mock: false,
       exam_type: 'descriptive',
+      university_id: null,
       notes: ''
     });
     setSelectedExam(null);
     setFormMode('create');
     setShowForm(false);
   };
-  
-  // 点数フォームリセット
-  const resetScoreForm = () => {
-    setScoreFormData({
-      note_id: '',
-      descriptive_score: '',
-      multiple_choice_score: '',
-      total_score: '',
-      max_score: ''
-    });
-    setShowScoreForm(false);
-  };
-  
-  // 模試の編集を開始
-  const handleEditExam = (exam: MockExam) => {
+
+  // 試験の編集を開始
+  const handleEditExam = (exam: Exam) => {
     setSelectedExam(exam);
     setFormData({
       name: exam.name,
       date: exam.date,
-      exam_type: exam.exam_type || 'descriptive',
+      is_mock: exam.is_mock,
+      exam_type: exam.exam_type,
+      university_id: exam.university_id,
       notes: exam.notes || ''
     });
     setFormMode('edit');
     setShowForm(true);
   };
-  
-  // 模試の削除
+
+  // 試験の削除
   const handleDeleteExam = async (examId: number) => {
-    if (window.confirm('この模試を削除してもよろしいですか？関連する点数データもすべて削除されます。')) {
-      await deleteMockExam(examId);
-      
-      // 削除した模試が展開されていた場合は閉じる
+    if (window.confirm('この試験を削除してもよろしいですか？関連する点数データもすべて削除されます。')) {
+      await deleteExam(examId);
+
+      // 削除した試験が展開されていた場合は閉じる
       if (expandedExamId === examId) {
         setExpandedExamId(null);
       }
     }
   };
-  
-  // 模試の保存（作成または更新）
+
+  // 試験の保存（作成または更新）
   const handleSaveExam = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (formMode === 'create') {
-      await createMockExam(formData);
-    } else if (formMode === 'edit' && selectedExam) {
-      await updateMockExam(selectedExam.id, formData);
+
+    // --- Frontend Validation ---
+    if (!formData.name || formData.name.trim() === '') {
+      // TODO: Display a user-friendly error message instead of just logging
+      console.error('Exam name cannot be empty.');
+      // Optionally, set an error state to show in the UI
+      // setError({ message: '試験名は必須です。' }); 
+      return; // Prevent form submission
     }
-    
+    // --- End Validation ---
+
+    if (formMode === 'create') {
+      await createExam(formData);
+    } else if (formMode === 'edit' && selectedExam) {
+      await updateExam(selectedExam.id, formData);
+    }
+
     resetForm();
   };
-  
-  // 点数の保存
-  const handleSaveScore = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (expandedExamId === null) return;
-    
-    const noteId = parseInt(scoreFormData.note_id);
-    if (isNaN(noteId)) {
-      alert('有効なノートIDを入力してください');
-      return;
-    }
-    
-    const data = {
-      note_id: noteId,
-      descriptive_score: scoreFormData.descriptive_score ? parseFloat(scoreFormData.descriptive_score) : undefined,
-      multiple_choice_score: scoreFormData.multiple_choice_score ? parseFloat(scoreFormData.multiple_choice_score) : undefined,
-      total_score: scoreFormData.total_score ? parseFloat(scoreFormData.total_score) : undefined,
-      max_score: scoreFormData.max_score ? parseFloat(scoreFormData.max_score) : undefined
-    };
-    
-    await addOrUpdateScore(expandedExamId, data);
-    resetScoreForm();
-  };
-  
-  // 点数の削除
-  const handleDeleteScore = async (scoreId: number) => {
-    if (expandedExamId === null) return;
-    
-    if (window.confirm('この点数を削除してもよろしいですか？')) {
-      await deleteScore(expandedExamId, scoreId);
-    }
-  };
-  
-  // 模試の展開/折りたたみを切り替え
+
+  // 試験の展開/折りたたみを切り替え
   const toggleExamExpansion = (examId: number) => {
     if (expandedExamId === examId) {
       setExpandedExamId(null);
@@ -172,21 +125,17 @@ const MockExamsPage = () => {
       setExpandedExamId(examId);
     }
   };
-  
+
   // 日付をフォーマット
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    const date = parse(dateString, 'yyyy-MM-dd', new Date());
+    return format(date, 'yyyy年M月d日');
   };
-  
+
   // エラーメッセージを表示
   const renderError = () => {
     if (!error) return null;
-    
+
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 flex items-start">
         <AlertCircle className="w-5 h-5 mr-2 mt-0.5" />
@@ -197,21 +146,23 @@ const MockExamsPage = () => {
       </div>
     );
   };
-  
+
+  // 試験形式を日本語に変換
+  const formatExamType = (type: string) => {
+    switch (type) {
+      case 'descriptive': return '記述';
+      case 'multiple_choice': return 'マーク';
+      case 'combined': return '混合';
+      default: return type;
+    }
+  };
+
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">模試管理</h1>
+        <h1 className="text-2xl font-bold">試験管理</h1>
         <div className="flex gap-2">
-          <button 
-            onClick={() => fetchAllMockExams()}
-            className="btn btn-outline flex items-center"
-            disabled={isLoading}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            更新
-          </button>
-          <button 
+          <button
             onClick={() => {
               resetForm();
               setShowForm(true);
@@ -220,23 +171,24 @@ const MockExamsPage = () => {
             className="btn btn-primary flex items-center"
           >
             <Plus className="w-4 h-4 mr-2" />
-            新規模試
+            新規試験
           </button>
         </div>
       </div>
-      
+
       {renderError()}
-      
-      {/* 模試フォーム */}
+
+      {/* 試験フォーム */}
       {showForm && (
         <div className="card p-6 border rounded-lg shadow-sm mb-6">
           <h2 className="text-xl font-semibold mb-4">
-            {formMode === 'create' ? '新規模試の登録' : '模試の編集'}
+            {formMode === 'create' ? '新規試験の登録' : '試験の編集'}
           </h2>
           <form onSubmit={handleSaveExam}>
+
             <div className="mb-4">
               <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                模試名 <span className="text-red-500">*</span>
+                試験名 <span className="text-red-500">*</span>
               </label>
               <input
                 id="name"
@@ -245,10 +197,42 @@ const MockExamsPage = () => {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
-                placeholder="例: 2025年度第1回全国統一模試"
+                placeholder={'例: 2025年度第1回全国統一模試 or 東京大学 前期日程'}
               />
             </div>
-            
+
+            {/* Is Mock Checkbox */}
+            <div className="mb-4">
+              <div className="flex items-center">
+                <input
+                  id="is_mock"
+                  type="checkbox"
+                  className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+                  checked={formData.is_mock}
+                  onChange={(e) => setFormData({ ...formData, is_mock: e.target.checked })}
+                />
+                <label htmlFor="is_mock" className="ml-2 block text-sm text-gray-900">
+                  模試として登録する
+                </label>
+              </div>
+            </div>
+
+            {/* University ID input (always shown now) */}
+              <div className="mb-4">
+                <label htmlFor="university_id" className="block text-sm font-medium text-gray-700 mb-1">
+                  大学ID (本番試験の場合)
+                </label>
+                <input
+                  id="university_id"
+                  type="number"
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  value={formData.university_id ?? ''}
+                  onChange={(e) => setFormData({ ...formData, university_id: e.target.value ? parseInt(e.target.value, 10) : null })}
+                  placeholder="関連する大学のID"
+                />
+                 {/* TODO: Replace with a University Selector Component */}
+              </div>
+
             <div className="mb-4">
               <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                 実施日 <span className="text-red-500">*</span>
@@ -262,7 +246,8 @@ const MockExamsPage = () => {
                 required
               />
             </div>
-            
+
+            {/* Exam Type (mainly for mocks, but keep for consistency) */}
             <div className="mb-4">
               <label htmlFor="exam_type" className="block text-sm font-medium text-gray-700 mb-1">
                 試験形式 <span className="text-red-500">*</span>
@@ -274,11 +259,12 @@ const MockExamsPage = () => {
                 onChange={(e) => setFormData({ ...formData, exam_type: e.target.value })}
                 required
               >
-                <option value="descriptive">記述式</option>
-                <option value="multiple_choice">マーク式</option>
+                <option value="descriptive">記述</option>
+                <option value="multiple_choice">マーク</option>
+                <option value="combined">混合</option>
               </select>
             </div>
-            
+
             <div className="mb-4">
               <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                 メモ
@@ -287,12 +273,12 @@ const MockExamsPage = () => {
                 id="notes"
                 rows={3}
                 className="w-full p-2 border border-gray-300 rounded-md"
-                value={formData.notes}
+                value={formData.notes ?? ''}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="模試に関するメモ（オプション）"
+                placeholder="試験に関するメモ（オプション）"
               />
             </div>
-            
+
             <div className="flex justify-end gap-2">
               <button
                 type="button"
@@ -319,32 +305,46 @@ const MockExamsPage = () => {
           </form>
         </div>
       )}
-      
-      {/* 模試リスト */}
+
+      {/* 試験リスト */}
       <div className="space-y-4">
-        {mockExams.length === 0 ? (
+        {exams.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            {isLoading ? '模試データを読み込み中...' : '模試データがありません。「新規模試」ボタンから登録してください。'}
+            {isLoading ? '試験データを読み込み中...' : '試験データがありません。「新規試験」ボタンから登録してください。'}
           </div>
         ) : (
-          mockExams.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(exam => (
+          // Sort exams by date, ascending (oldest first) using date-fns
+          [...exams].sort((a, b) => compareAsc(parse(a.date, 'yyyy-MM-dd', new Date()), parse(b.date, 'yyyy-MM-dd', new Date()))).map((exam) => (
             <div key={exam.id} className="card border rounded-lg shadow-sm overflow-hidden">
-              {/* 模試ヘッダー */}
-              <div 
-                className="p-4 bg-white flex justify-between items-center cursor-pointer"
+              {/* 試験ヘッダー */}
+              <div
+                className="p-4 bg-white flex justify-between items-center cursor-pointer hover:bg-gray-50"
                 onClick={() => toggleExamExpansion(exam.id)}
               >
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold">{exam.name}</h3>
-                  <div className="flex items-center text-gray-600 text-sm mt-1">
-                    <Calendar className="w-4 h-4 mr-1" />
-                    {formatDate(exam.date)}
-                    <span className="ml-2 px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full text-xs">
-                      {exam.exam_type === 'multiple_choice' ? 'マーク式' : '記述式'}
+                <div className="flex-1 min-w-0">
+                   <h3 className="text-lg font-semibold truncate">{exam.name}</h3>
+                  <div className="flex items-center text-gray-600 text-sm mt-1 flex-wrap gap-x-2 gap-y-1">
+                    {exam.is_mock && (
+                      <span className="inline-flex items-center px-2 py-0.5 bg-yellow-200 text-yellow-800 rounded-full text-xs font-medium">
+                        模試
+                      </span>
+                    )}
+                    <span className="inline-flex items-center">
+                       <Calendar className="w-4 h-4 mr-1" />
+                       {formatDate(exam.date)}
                     </span>
+                    <span className="inline-flex items-center px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full text-xs">
+                      {formatExamType(exam.exam_type)}
+                    </span>
+                    {exam.university_id && (
+                       <span className="inline-flex items-center text-purple-700">
+                         <Building className="w-4 h-4 mr-1" />
+                         大学ID: {exam.university_id}
+                       </span>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -372,14 +372,11 @@ const MockExamsPage = () => {
                   )}
                 </div>
               </div>
-              
+
               {/* 展開時の点数リスト */}
               {expandedExamId === exam.id && (
                 <div className="p-4 bg-gray-50 border-t">
-                  {/* 科目別点数の上部タイトルは不要なので削除 */}
-                  
-                  {/* 科目別点数 */}
-                  <MockExamSubjectScores mockExamId={exam.id} />
+                  <ExamSubjectScores examId={exam.id} />
                 </div>
               )}
             </div>
@@ -390,4 +387,4 @@ const MockExamsPage = () => {
   );
 };
 
-export default MockExamsPage;
+export default ExamsPage;

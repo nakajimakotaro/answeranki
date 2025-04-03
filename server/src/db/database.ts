@@ -87,37 +87,27 @@ const createTables = async (): Promise<void> => {
     )
   `);
   
-  // Create exam_dates table
+  // Create exams table (merged mock_exams and exam_dates)
   await db.exec(`
-    CREATE TABLE IF NOT EXISTS exam_dates (
+    CREATE TABLE IF NOT EXISTS exams (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      university_id INTEGER NOT NULL,
-      exam_date TEXT NOT NULL,
-      exam_type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      date TEXT NOT NULL,
+      is_mock BOOLEAN NOT NULL DEFAULT 0, -- Re-added: 0 for real, 1 for mock
+      exam_type TEXT NOT NULL DEFAULT 'descriptive', -- Applicable mainly for mocks
+      university_id INTEGER, -- For real exams linked to a university
+      notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (university_id) REFERENCES universities (id) ON DELETE CASCADE
     )
   `);
   
-  // Create mock_exams table
+  // Create exam_scores table (renamed from mock_exam_scores)
   await db.exec(`
-    CREATE TABLE IF NOT EXISTS mock_exams (
+    CREATE TABLE IF NOT EXISTS exam_scores (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      date TEXT NOT NULL,
-      exam_type TEXT NOT NULL DEFAULT 'descriptive',
-      notes TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
-  // Create mock_exam_scores table
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS mock_exam_scores (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      mock_exam_id INTEGER NOT NULL,
+      exam_id INTEGER NOT NULL, -- Renamed from mock_exam_id
       note_id INTEGER NOT NULL,
       descriptive_score REAL,
       multiple_choice_score REAL,
@@ -125,7 +115,7 @@ const createTables = async (): Promise<void> => {
       max_score REAL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (mock_exam_id) REFERENCES mock_exams (id) ON DELETE CASCADE
+      FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE -- Updated foreign key
     )
   `);
   
@@ -141,6 +131,22 @@ const createTables = async (): Promise<void> => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (textbook_id) REFERENCES textbooks (id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create subject_scores table
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS subject_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exam_id INTEGER NOT NULL,
+      exam_type TEXT NOT NULL, -- '共テ' or '二次試験' etc.
+      subject TEXT NOT NULL,
+      score REAL,
+      max_score REAL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE,
+      UNIQUE (exam_id, exam_type, subject) -- Ensure uniqueness per exam, type, and subject
     )
   `);
   

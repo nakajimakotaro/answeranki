@@ -16,6 +16,7 @@
   "dependencies": {
     "autoprefixer": "^10.4.21",
     "daisyui": "^5.0.9",
+    "date-fns": "^4.1.0",
     "lucide-react": "^0.483.0",
     "nanoid": "^5.1.5",
     "react": "^19.0.0",

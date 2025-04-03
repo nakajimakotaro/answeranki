@@ -1,79 +1,35 @@
 import { getDb, initDatabase } from './database.js';
 
 /**
- * Run database migrations
+ * Run database migrations (Currently does nothing as tables are created in initDatabase)
  */
 export const runMigrations = async (): Promise<void> => {
-  const db = getDb();
-  
+  // const db = getDb(); // No longer needed here as createTables handles it
   try {
-    // Check if mock_exam_subject_scores table exists
-    const tableExists = await db.get(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='mock_exam_subject_scores'"
-    );
-    
-    if (!tableExists) {
-      console.log('Creating mock_exam_subject_scores table...');
-      
-      // Create mock_exam_subject_scores table
-      await db.exec(`
-        CREATE TABLE IF NOT EXISTS mock_exam_subject_scores (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          mock_exam_id INTEGER NOT NULL,
-          exam_type TEXT NOT NULL,
-          subject TEXT NOT NULL,
-          score REAL,
-          max_score REAL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (mock_exam_id) REFERENCES mock_exams (id) ON DELETE CASCADE
-        )
-      `);
-      
-      console.log('mock_exam_subject_scores table created successfully');
-    } else {
-      console.log('mock_exam_subject_scores table already exists');
-    }
-    
-    // Check if exam_type column exists in mock_exams table
-    const columnInfo = await db.get(
-      "PRAGMA table_info(mock_exams)"
-    );
-    
-    const columns = await db.all("PRAGMA table_info(mock_exams)");
-    const hasExamTypeColumn = columns.some(col => col.name === 'exam_type');
-    
-    if (!hasExamTypeColumn) {
-      console.log('Adding exam_type column to mock_exams table...');
-      
-      // Add exam_type column to mock_exams table
-      await db.exec(`
-        ALTER TABLE mock_exams
-        ADD COLUMN exam_type TEXT NOT NULL DEFAULT 'descriptive'
-      `);
-      
-      console.log('exam_type column added to mock_exams table successfully');
-    } else {
-      console.log('exam_type column already exists in mock_exams table');
-    }
-    
-  } catch (error) {
-    console.error('Migration error:', error);
-    throw error;
+    console.log('[Migration] Skipping migrations as tables are created during initialization.');
+    // Migration logic has been removed as requested for the development environment.
+    // All necessary tables are created using `CREATE TABLE IF NOT EXISTS`
+    // within the `createTables` function called by `initDatabase` in `database.ts`.
+  } catch (error: unknown) {
+    // This catch block is unlikely to be hit with the current empty logic,
+    // but kept for robustness in case of future changes.
+    console.error('Migration check error (unexpected):', error);
+    throw error; // Re-throw error if any unexpected issue occurs
   }
 };
 
-// Run migrations if this file is executed directly
+// This part allows running the migration script directly, e.g., for testing init.
+// With the current empty runMigrations, it will just initialize the DB and log.
 if (process.argv[1] === new URL(import.meta.url).pathname) {
   (async () => {
     try {
-      // Initialize the database first
+      // Initialize the database first if run standalone
       await initDatabase();
-      await runMigrations();
-      console.log('Migrations completed successfully');
+      await runMigrations(); // This will just log the skipping message
+      console.log('Migration script finished (no operations performed).');
       process.exit(0);
     } catch (error) {
-      console.error('Migration failed:', error);
+      console.error('Migration script failed:', error);
       process.exit(1);
     }
   })();

@@ -2,6 +2,8 @@
  * スケジュール管理サービス
  * バックエンドのスケジュールAPIと通信するためのサービス
  */
+import { parseISO } from 'date-fns';
+import { Exam } from '../../../shared/types/exam';
 
 // 大学情報の型定義
 export interface University {
@@ -36,17 +38,6 @@ export interface StudySchedule {
   buffer_days?: number;
   weekday_goals?: string; // 曜日ごとの問題数（JSON文字列）
   total_problems?: number; // 総問題数（指定された場合）
-  created_at?: string;
-  updated_at?: string;
-}
-
-// 受験日の型定義
-export interface ExamDate {
-  id?: number;
-  university_id: number;
-  university_name?: string;
-  exam_date: string;
-  exam_type: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -107,6 +98,27 @@ export interface ApiError {
   error: string;
   details?: string;
 }
+
+// タイムラインイベントの型定義 (サーバー側と合わせる)
+export interface TimelineEvent {
+  id: string; // 例: "schedule-1", "exam-5", "mock_exam-10"
+  type: 'schedule' | 'exam' | 'mock_exam';
+  title: string; // 例: "数学 参考書A", "大学X 共通テスト", "第1回 模試Y"
+  startDate: Date; // Use Date object
+  endDate?: Date; // Use Date object (optional for schedule)
+  details: StudySchedule | Exam | any; // Use shared Exam type for exam/mock_exam details
+}
+
+// Raw event type received from API before parsing dates
+interface RawTimelineEvent {
+    id: string;
+    type: 'schedule' | 'exam' | 'mock_exam';
+    title: string;
+    startDate: string; // Date string from API
+    endDate?: string; // Date string from API
+    details: any;
+}
+
 
 /**
  * スケジュールサービスクラス
@@ -227,14 +239,6 @@ class ScheduleService {
   // スケジュール関連のAPI
 
   /**
-   * スケジュール一覧を取得する
-   * @returns スケジュール一覧
-   */
-  async getSchedules(): Promise<StudySchedule[]> {
-    return this.fetchApi<StudySchedule[]>('/schedules');
-  }
-
-  /**
    * スケジュールを作成する
    * @param schedule スケジュール情報
    * @returns 作成されたスケジュール情報
@@ -260,44 +264,6 @@ class ScheduleService {
    */
   async deleteSchedule(id: number): Promise<{ message: string }> {
     return this.fetchApi<{ message: string }>(`/schedules/${id}`, 'DELETE');
-  }
-
-  // 受験日関連のAPI
-
-  /**
-   * 受験日一覧を取得する
-   * @returns 受験日一覧
-   */
-  async getExams(): Promise<ExamDate[]> {
-    return this.fetchApi<ExamDate[]>('/exams');
-  }
-
-  /**
-   * 受験日を作成する
-   * @param exam 受験日情報
-   * @returns 作成された受験日情報
-   */
-  async createExam(exam: ExamDate): Promise<ExamDate> {
-    return this.fetchApi<ExamDate>('/exams', 'POST', exam);
-  }
-
-  /**
-   * 受験日を更新する
-   * @param id 受験日ID
-   * @param exam 更新する受験日情報
-   * @returns 更新された受験日情報
-   */
-  async updateExam(id: number, exam: ExamDate): Promise<ExamDate> {
-    return this.fetchApi<ExamDate>(`/exams/${id}`, 'PUT', exam);
-  }
-
-  /**
-   * 受験日を削除する
-   * @param id 受験日ID
-   * @returns 削除結果
-   */
-  async deleteExam(id: number): Promise<{ message: string }> {
-    return this.fetchApi<{ message: string }>(`/exams/${id}`, 'DELETE');
   }
 
   // 学習ログ関連のAPI
@@ -431,6 +397,38 @@ class ScheduleService {
     }
     
     return this.fetchApi<YearlyLogData>(endpoint);
+  }
+
+  /**
+   * タイムラインイベント（スケジュール、試験、模試）を取得する
+   * @param startDate 開始日 (YYYY-MM-DD)
+   * @param endDate 終了日 (YYYY-MM-DD)
+   * @returns タイムラインイベントの配列
+   */
+  async getTimelineEvents(startDate?: string, endDate?: string): Promise<TimelineEvent[]> {
+    let endpoint = '/timeline-events';
+    const params = new URLSearchParams();
+    if (startDate) {
+      params.append('startDate', startDate);
+    }
+    if (endDate) {
+      params.append('endDate', endDate);
+    }
+    const queryString = params.toString();
+    if (queryString) {
+      endpoint += `?${queryString}`;
+    }
+    // Fetch raw events with date strings
+    const rawEvents = await this.fetchApi<RawTimelineEvent[]>(endpoint);
+
+    // Parse date strings (expected 'yyyy-MM-dd' from API) into Date objects using date-fns
+    return rawEvents.map(event => ({
+        ...event,
+        // parseISO handles 'yyyy-MM-dd' and other ISO 8601 formats
+        startDate: parseISO(event.startDate),
+        // Only parse endDate if it exists
+        endDate: event.endDate ? parseISO(event.endDate) : undefined,
+    }));
   }
 }
 

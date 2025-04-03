@@ -1,5 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
-import { scheduleService, Textbook, StudySchedule, ExamDate } from '../services/scheduleService';
+import React, { useState, useEffect, useMemo } from 'react'; // Import React
+import { parseISO, compareAsc, isWithinInterval, startOfToday, differenceInDays, isValid, getYear, format, setMonth, setYear, isBefore } from 'date-fns'; // Import date-fns functions
+import { scheduleService, Textbook, StudySchedule, TimelineEvent, Progress } from '../services/scheduleService'; // Removed ExamDate, Import TimelineEvent and Progress
+import { Exam } from '../../../shared/types/exam'; // Import shared Exam type
 import { BarChart2, BookOpen, Filter, AlertTriangle, CheckCircle, Clock, BookMarked } from 'lucide-react';
 
 interface TextbookStackedProgressProps {
@@ -13,15 +15,17 @@ interface TextbookStackedProgressProps {
  * 参考書を下から上に積み上げて表示し、予定と実際の進捗を比較する
  */
 const TextbookStackedProgress = ({
-  startDate = `${new Date().getFullYear()}/04/01`,
-  endDate = `${new Date().getFullYear() + 1}/03/31`,
+  // Use date-fns for default dates in 'yyyy-MM-dd' format
+  startDate = format(setMonth(setYear(new Date(), getYear(new Date())), 3), 'yyyy-MM-dd'), // Current year's April 1st
+  endDate = format(setMonth(setYear(new Date(), getYear(new Date()) + 1), 2), 'yyyy-MM-dd'), // Next year's March 31st
   initialSubject
-}: TextbookStackedProgressProps) => {
+}: TextbookStackedProgressProps): JSX.Element => { // Add explicit return type
   // 状態管理
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [schedules, setSchedules] = useState<StudySchedule[]>([]);
-  const [exams, setExams] = useState<ExamDate[]>([]);
-  const [progressData, setProgressData] = useState<{[key: number]: any}>({});
+  const [exams, setExams] = useState<Exam[]>([]); // Use shared Exam type
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]); // Add state for timeline events
+  const [progressData, setProgressData] = useState<{[key: number]: Progress}>({}); // Use Progress type
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string | undefined>(initialSubject);
@@ -36,37 +40,48 @@ const TextbookStackedProgress = ({
   const fetchData = async () => {
     try {
       setLoading(true);
-      
-      // 参考書、スケジュール、試験日程を取得
-      const [textbooksData, schedulesData, examsData] = await Promise.all([
+      setError(null); // Reset error
+
+      // 参考書とタイムラインイベントを取得
+      const [textbooksData, timelineEventsData] = await Promise.all([
         scheduleService.getTextbooks(),
-        scheduleService.getSchedules(),
-        scheduleService.getExams()
+        scheduleService.getTimelineEvents() // Fetch all timeline events
       ]);
-      
+
       setTextbooks(textbooksData);
-      setSchedules(schedulesData);
-      setExams(examsData);
-      
+      setTimelineEvents(timelineEventsData);
+
+      // スケジュールと試験情報をtimelineEventsDataから抽出
+      const extractedSchedules = timelineEventsData
+        .filter((event): event is TimelineEvent & { details: StudySchedule } => event.type === 'schedule')
+        .map(event => event.details);
+      // Extract exams using shared Exam type
+      const extractedExams = timelineEventsData
+        .filter((event): event is TimelineEvent & { details: Exam } => event.type === 'exam' || event.type === 'mock_exam')
+        .map(event => event.details);
+
+      setSchedules(extractedSchedules);
+      setExams(extractedExams); // Now contains Exam objects
+
       // 科目リストを抽出
-      const subjectList = Array.from(new Set(textbooksData.map(t => t.subject))).sort();
+      const subjectList = Array.from(new Set(textbooksData.map((t: Textbook) => t.subject))).sort();
       setSubjects(subjectList);
-      
-      // 各参考書の進捗データを取得
-      const progressPromises = schedulesData.map(schedule => 
+
+      // 各参考書の進捗データを取得 (extractedSchedulesを使用)
+      const progressPromises = extractedSchedules.map((schedule: StudySchedule) =>
         scheduleService.getProgress(schedule.textbook_id)
       );
-      
-      const progressResults = await Promise.all(progressPromises);
-      
+
+      const progressResults: Progress[] = await Promise.all(progressPromises);
+
       // 進捗データをテキストブックIDをキーとしたオブジェクトに変換
-      const progressMap: {[key: number]: any} = {};
-      progressResults.forEach(progress => {
-        if (progress.textbook && progress.textbook.id) {
+      const progressMap: {[key: number]: Progress} = {}; // Use Progress type
+      progressResults.forEach((progress: Progress) => {
+        if (progress?.textbook?.id !== undefined) {
           progressMap[progress.textbook.id] = progress;
         }
       });
-      
+
       setProgressData(progressMap);
       setLoading(false);
     } catch (err) {
@@ -87,68 +102,82 @@ const TextbookStackedProgress = ({
         return textbook && textbook.subject === selectedSubject;
       });
     }
-    
-    // 開始日でソート
-    return [...filtered].sort((a, b) => {
-      return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
-    });
+
+    return [...filtered].sort((a, b) => compareAsc(parseISO(a.start_date), parseISO(b.start_date)));
   }, [schedules, textbooks, selectedSubject]);
 
-  // 試験日程を日付でソート
+  if(exams.length > 0) {
+    console.log('試験日程:', JSON.stringify(exams[0], null, 2));
+  }
+  // 試験日程を日付でソート (date-fns を使用) - Use 'date' property
   const sortedExams = useMemo(() => {
-    return [...exams].sort((a, b) => {
-      return new Date(a.exam_date).getTime() - new Date(b.exam_date).getTime();
-    });
+    // Filter out exams with invalid dates before sorting
+    const validExams = exams.filter(exam => exam.date && isValid(parseISO(exam.date)));
+    return [...validExams].sort((a, b) => compareAsc(parseISO(a.date), parseISO(b.date)));
   }, [exams]);
 
-  // 日付範囲内かどうかを判定
-  const isWithinDateRange = (date: string) => {
-    const targetDate = new Date(date);
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    return targetDate >= start && targetDate <= end;
+  // 日付範囲内かどうかを判定 (date-fns を使用) - Use 'date' property
+  const isWithinDateRange = (dateString: string) => {
+    try {
+      const targetDate = parseISO(dateString); // Use dateString parameter
+      const start = parseISO(startDate);
+      const end = parseISO(endDate);
+      if (!isValid(targetDate) || !isValid(start) || !isValid(end)) return false;
+      return isWithinInterval(targetDate, { start, end });
+    } catch {
+      return false; // Handle potential parsing errors
+    }
   };
 
   // 進捗率を計算
   const calculateProgress = (textbookId: number) => {
-    const progress = progressData[textbookId];
-    if (!progress) return 0;
-    
-    return progress.progress.solvedProblems / progress.textbook.total_problems * 100;
-  };
-
-  // 予定進捗率を計算
-  const calculatePlannedProgress = (schedule: StudySchedule) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const start = new Date(schedule.start_date);
-    const end = new Date(schedule.end_date);
-    
-    if (today < start) return 0;
-    if (today > end) return 100;
-    
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const elapsedDays = Math.ceil((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    
-    return Math.min(100, Math.round((elapsedDays / totalDays) * 100));
-  };
-
-  // 試験タイプに応じた色を取得
-  const getExamTypeColor = (examType: string) => {
-    switch (examType.toLowerCase()) {
-      case '共通テスト':
-      case '共テ':
-        return 'bg-red-500';
-      case '二次試験':
-      case '二次':
-        return 'bg-purple-500';
-      case '模試':
-        return 'bg-yellow-500';
-      default:
-        return 'bg-gray-500';
+    const progress = progressData[textbookId]; // Keep only one declaration
+    // Add checks for progress and textbook properties
+    if (!progress || !progress.textbook || !progress.textbook.total_problems || progress.textbook.total_problems <= 0) {
+        return 0;
     }
+    // Ensure progress.progress exists and has solvedProblems
+    if (!progress.progress || typeof progress.progress.solvedProblems !== 'number') {
+        return 0;
+    }
+    return (progress.progress.solvedProblems / progress.textbook.total_problems) * 100;
   };
+
+  // 予定進捗率を計算 (date-fns を使用)
+  const calculatePlannedProgress = (schedule: StudySchedule) => {
+    const today = startOfToday();
+    const start = parseISO(schedule.start_date);
+    const end = parseISO(schedule.end_date);
+
+    if (!isValid(start) || !isValid(end) || differenceInDays(end, start) < 0) return 0; // Invalid range
+
+    if (isBefore(today, start)) return 0; // Not started yet
+    if (!isBefore(today, end)) return 100; // Ended or today is the end date
+
+    const totalDays = differenceInDays(end, start) + 1;
+    const elapsedDays = differenceInDays(today, start) + 1;
+
+    return totalDays > 0 ? Math.min(100, Math.round((elapsedDays / totalDays) * 100)) : 0;
+  };
+
+  // 試験タイプに応じた色を取得 (Use Exam object)
+  const getExamTypeColor = (exam: Exam) => {
+    // Use is_mock flag first
+    if (exam.is_mock) {
+      return 'bg-yellow-500'; // Yellow for mocks
+    }
+    // Then check name or exam_type for keywords
+    const nameLower = exam.name.toLowerCase();
+    const typeLower = exam.exam_type.toLowerCase(); // exam_type is now string
+    if (nameLower.includes('共通') || nameLower.includes('共テ') || typeLower.includes('common')) {
+      return 'bg-red-500'; // Red for common tests
+    }
+    if (nameLower.includes('二次') || typeLower.includes('secondary')) {
+      return 'bg-purple-500'; // Purple for secondary tests
+    }
+    // Default color
+    return 'bg-gray-500';
+  }; // Removed extra closing brace here
 
   // 進捗状況に応じたステータスを取得
   const getProgressStatus = (actual: number, planned: number) => {
@@ -211,24 +240,31 @@ const TextbookStackedProgress = ({
           <Clock className="h-4 w-4 mr-1" />
           試験日程
         </h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          {sortedExams.filter(exam => isWithinDateRange(exam.exam_date)).map((exam, index) => (
-            <div 
-              key={index} 
+          {/* Filter and map using 'date' property */}
+          {sortedExams.filter(exam => isWithinDateRange(exam.date)).map((exam, index) => (
+            <div
+              key={exam.id || index} // Use exam.id if available
               className="flex items-center p-2 rounded-md border border-gray-200"
             >
-              <div className={`w-3 h-3 ${getExamTypeColor(exam.exam_type)} rounded-full mr-2`}></div>
+              {/* Pass the whole exam object to getExamTypeColor */}
+              <div className={`w-3 h-3 ${getExamTypeColor(exam)} rounded-full mr-2`}></div>
               <div>
-                <div className="text-sm font-medium">{exam.university_name}</div>
+                {/* Display exam.name, potentially prefixing with university_name if not a mock */}
+                <div className="text-sm font-medium">
+                  {exam.is_mock ? exam.name : (exam.university_name ? `${exam.university_name} ${exam.name}`: exam.name)}
+                </div>
                 <div className="text-xs text-gray-500">
-                  {exam.exam_type} - {exam.exam_date}
+                  {/* Display exam.date */}
+                  {exam.is_mock ? '模試' : '本番'} - {format(parseISO(exam.date), 'yyyy/MM/dd')}
                 </div>
               </div>
             </div>
           ))}
-          
-          {sortedExams.filter(exam => isWithinDateRange(exam.exam_date)).length === 0 && (
+
+          {/* Filter using 'date' property */}
+          {sortedExams.filter(exam => isWithinDateRange(exam.date)).length === 0 && (
             <div className="text-sm text-gray-500 col-span-full">
               表示する試験日程がありません
             </div>

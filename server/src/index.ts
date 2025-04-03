@@ -8,7 +8,8 @@ import { setupImageProcessing } from './services/imageProcessing.js';
 import { initDatabase } from './db/database.js';
 import { runMigrations } from './db/migrate.js';
 import scheduleApiRouter from './routes/scheduleApi.js';
-import { setupMockExamApi } from './routes/mockExamApi.js';
+import examApiRouter from './routes/examApi.js'; // Import the new exam router
+import { errorHandler } from './middleware/errorHandler.js'; // Import the error handler
 
 // ES modules compatibility
 const __filename = fileURLToPath(import.meta.url);
@@ -45,13 +46,17 @@ setupMediaRoutes(app); // Add media routes to the main server
 // Add schedule API routes
 app.use('/api/schedule', scheduleApiRouter);
 
-// Set up mock exam API routes
-setupMockExamApi(app);
+// Use the new exam API router under /api/exams
+app.use('/api/exams', examApiRouter);
 
 // Catch-all route to serve the React app
 app.get('*', (req, res) => {
   res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
 });
+
+// --- Error Handling Middleware ---
+// This MUST be the last piece of middleware added
+app.use(errorHandler);
 
 // Start the unified server
 app.listen(PORT, () => {

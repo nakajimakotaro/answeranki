@@ -1,10 +1,42 @@
 import { useState, useEffect } from 'react';
-import { scheduleService, Textbook, StudySchedule, StudyLog, ExamDate } from '../services/scheduleService';
+import { parseISO, differenceInDays, startOfToday, isValid, format } from 'date-fns'; // Import date-fns functions
+import { scheduleService, Textbook, StudySchedule, StudyLog, TimelineEvent, Progress } from '../services/scheduleService'; // Import necessary types
+import { Exam } from '../../../shared/types/exam'; // Import shared Exam type
 import { BarChart2, Calendar, BookOpen, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
-import { mockExamService, MockExam } from '../services/mockExamService';
+
+// Define MockExam type locally as it's derived from TimelineEvent
+// Note: This might be redundant if the shared Exam type covers mock exams via the is_mock flag.
+// Consider using the shared Exam type directly if applicable.
+interface MockExam {
+  id: number;
+  name: string;
+  date: string;
+  exam_type: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Define the structure for processed progress data set in state
+interface ProcessedProgressData {
+  hasSchedule: true;
+  textbook: Textbook;
+  schedule: StudySchedule;
+  totalDays: number;
+  elapsedDays: number;
+  remainingDays: number;
+  idealProgress: number; // Calculated ideal solved problems
+  actualProgress: number; // Actual solved problems from service
+  progressDifference: number;
+  progressStatus: string;
+  dailyTarget: number;
+  dailyData: { date: string; actual: number; planned: number }[];
+  cumulativeData: { date: string; actual: number; ideal: number }[];
+  totalProblems: number; // Total problems from textbook
+}
 
 interface ScheduleProgressChartProps {
-  textbookId?: number;
+  textbookId?: number; // Allow initial textbook selection via prop
 }
 
 /**
@@ -15,143 +47,145 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
   // 状態管理
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [selectedTextbookId, setSelectedTextbookId] = useState<number | undefined>(textbookId);
-  const [progressData, setProgressData] = useState<any>(null);
-  const [mockExams, setMockExams] = useState<MockExam[]>([]);
-  const [exams, setExams] = useState<ExamDate[]>([]);
+  const [progressData, setProgressData] = useState<ProcessedProgressData | { hasSchedule: false; textbook: Textbook } | null>(null); // Use new interface
+  const [mockExams, setMockExams] = useState<Exam[]>([]); // Use shared Exam type for mock exams
+  const [exams, setExams] = useState<Exam[]>([]); // Use shared Exam type for real exams
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]); // Keep timeline events if needed elsewhere, though maybe not
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // データ取得
+  // データ取得 (Textbooks and TimelineEvents)
   useEffect(() => {
-    fetchTextbooks();
-    fetchMockExams();
-    fetchExams();
-  }, []);
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [textbooksData, timelineEventsData] = await Promise.all([
+          scheduleService.getTextbooks(),
+          scheduleService.getTimelineEvents() // Fetch all timeline events
+        ]);
 
-  // 参考書が選択されたら進捗データを取得
+        setTextbooks(textbooksData);
+        setTimelineEvents(timelineEventsData); // Store raw timeline events
+
+        // Extract exams and mock exams from timeline events using shared Exam type
+        const extractedExams = timelineEventsData
+          .filter((event): event is TimelineEvent & { details: Exam } => event.type === 'exam')
+          .map(event => event.details);
+        const extractedMockExams = timelineEventsData
+          // Use the shared Exam type and filter by is_mock flag if details is Exam
+          .filter((event): event is TimelineEvent & { details: Exam } =>
+            event.type === 'mock_exam' && typeof event.details === 'object' && event.details !== null && 'is_mock' in event.details && event.details.is_mock === true
+          )
+          .map(event => event.details);
+
+        setExams(extractedExams);
+        setMockExams(extractedMockExams); // This now holds Exam objects where is_mock is true
+
+        // Determine initial selected textbook ID
+        const initialIdToSelect = textbookId ?? (textbooksData.length > 0 ? textbooksData[0].id : undefined);
+
+        if (initialIdToSelect !== undefined) {
+          setSelectedTextbookId(initialIdToSelect);
+          // fetchProgressData will be triggered by the state change via the next useEffect
+        } else {
+          setProgressData(null); // No textbook to show progress for
+          setLoading(false); // No progress to fetch
+        }
+
+      } catch (err) {
+        console.error('Error fetching initial data:', err);
+        setError('初期データの取得中にエラーが発生しました');
+        setLoading(false);
+      }
+    };
+    loadInitialData();
+  }, [textbookId]); // Rerun if the textbookId prop changes
+
+  // Fetch progress data when selectedTextbookId changes
   useEffect(() => {
-    if (selectedTextbookId) {
+    if (selectedTextbookId !== undefined) {
       fetchProgressData(selectedTextbookId);
+    } else {
+      // Clear progress data if no textbook is selected
+      setProgressData(null);
+      // Ensure loading is false if we cleared selection
+      if (loading) setLoading(false);
     }
   }, [selectedTextbookId]);
 
-  // 模試データを取得
-  const fetchMockExams = async () => {
-    try {
-      const mockExamsData = await mockExamService.getAllMockExams();
-      setMockExams(mockExamsData);
-    } catch (err) {
-      console.error('Error fetching mock exams:', err);
-      setError('模試データの取得中にエラーが発生しました');
-    }
-  };
-
-  // 試験日程を取得
-  const fetchExams = async () => {
-    try {
-      const examsData = await scheduleService.getExams();
-      setExams(examsData);
-    } catch (err) {
-      console.error('Error fetching exams:', err);
-      setError('試験日程の取得中にエラーが発生しました');
-    }
-  };
-
-  // 参考書一覧を取得
-  const fetchTextbooks = async () => {
-    try {
-      const textbooksData = await scheduleService.getTextbooks();
-      setTextbooks(textbooksData);
-      
-      // 初期選択（指定がなければ最初の参考書）
-      if (!selectedTextbookId && textbooksData.length > 0) {
-        setSelectedTextbookId(textbooksData[0].id);
-      }
-    } catch (err) {
-      console.error('Error fetching textbooks:', err);
-      setError('参考書データの取得中にエラーが発生しました');
-    }
-  };
-
-  // 進捗データを取得
-  const fetchProgressData = async (textbookId: number) => {
+  // 進捗データを取得して加工する関数
+  const fetchProgressData = async (id: number) => {
     try {
       setLoading(true);
-      
-      // 参考書の進捗情報を取得
-      const progress = await scheduleService.getProgress(textbookId);
-      
-      // スケジュールがない場合
-      if (!progress.schedule) {
+      setError(null);
+      const progressResult = await scheduleService.getProgress(id);
+
+      if (!progressResult.schedule) {
         setProgressData({
           hasSchedule: false,
-          textbook: progress.textbook
+          textbook: progressResult.textbook,
         });
         setLoading(false);
         return;
       }
-      
-      // 日付の範囲を取得
-      const startDate = new Date(progress.schedule.start_date);
-      const endDate = new Date(progress.schedule.end_date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      // 経過日数を計算
-      const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      // Calculations using date-fns
+      const { textbook, schedule, progress: rawProgress, logs } = progressResult;
+      const startDate = parseISO(schedule.start_date);
+      const endDate = parseISO(schedule.end_date);
+      const today = startOfToday(); // Use startOfToday
+
+      // Validate dates
+      if (!isValid(startDate) || !isValid(endDate)) {
+          throw new Error("Invalid schedule dates");
+      }
+
+      // Calculate days using differenceInDays, add 1 for inclusive count
+      const totalDays = Math.max(1, differenceInDays(endDate, startDate) + 1);
       const elapsedDays = Math.min(
-        Math.ceil((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+        Math.max(0, differenceInDays(today, startDate) + 1), // Add 1 for inclusive
         totalDays
       );
-      
-      // 残り日数を計算
       const remainingDays = Math.max(0, totalDays - elapsedDays);
-      
-      // 理想的な進捗を計算
-      const dailyIdealProgress = progress.textbook.total_problems / totalDays;
+      const totalProblems = textbook.total_problems || 0;
+      const actualProgress = rawProgress.solvedProblems || 0;
+
+      const dailyIdealProgress = totalProblems > 0 && totalDays > 0 ? totalProblems / totalDays : 0;
       const idealProgress = Math.min(
         Math.round(dailyIdealProgress * elapsedDays),
-        progress.textbook.total_problems
+        totalProblems
       );
-      
-      // 実際の進捗
-      const actualProgress = progress.progress.solvedProblems;
-      
-      // 進捗の差を計算
+
       const progressDifference = actualProgress - idealProgress;
       const progressStatus = progressDifference >= 0 ? '順調' : '遅れ';
-      
-      // 1日あたりの残り問題数
-      const dailyTarget = remainingDays > 0 
-        ? Math.ceil((progress.textbook.total_problems - actualProgress) / remainingDays)
-        : 0;
-      
-      // 日別の進捗データを作成
-      const dailyData = progress.logs.map((log: StudyLog) => ({
+      const dailyTarget = remainingDays > 0 && totalProblems > 0
+        ? Math.ceil(Math.max(0, totalProblems - actualProgress) / remainingDays)
+        : (totalProblems > 0 ? totalProblems - actualProgress : 0); // If no remaining days, target is remaining problems
+
+      const dailyData = logs.map((log: StudyLog) => ({
         date: log.date,
-        actual: log.actual_amount,
+        actual: log.actual_amount || 0,
         planned: Math.round(dailyIdealProgress)
       }));
-      
-      // 累積データを計算
+
       let cumulativeActual = 0;
       let cumulativeIdeal = 0;
-      
-      const cumulativeData = dailyData.map((day: any) => {
+      const cumulativeData = dailyData.map((day) => {
         cumulativeActual += day.actual;
         cumulativeIdeal += day.planned;
-        
         return {
           date: day.date,
           actual: cumulativeActual,
           ideal: cumulativeIdeal
         };
       });
-      
+
+      // Set state with the processed data structure
       setProgressData({
         hasSchedule: true,
-        textbook: progress.textbook,
-        schedule: progress.schedule,
+        textbook,
+        schedule,
         totalDays,
         elapsedDays,
         remainingDays,
@@ -162,9 +196,9 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
         dailyTarget,
         dailyData,
         cumulativeData,
-        totalProblems: progress.textbook.total_problems
+        totalProblems,
       });
-      
+
       setLoading(false);
     } catch (err) {
       console.error('Error fetching progress data:', err);
@@ -173,12 +207,18 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
     }
   };
 
-  // 日付をフォーマット
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return `${date.getMonth() + 1}/${date.getDate()}`;
+  // 日付をフォーマット (MM/DD) using date-fns
+  const formatDate = (dateString: string): string => {
+     try {
+        const date = parseISO(dateString); // Assume 'yyyy-MM-dd' format
+        if (!isValid(date)) return "無効";
+        return format(date, 'M/d'); // Format as Month/Day
+     } catch {
+        return "無効";
+     }
   };
 
+  // ローディング表示
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -187,11 +227,12 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
     );
   }
 
+  // エラー表示
   if (error) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         <p>{error}</p>
-        <button 
+        <button
           className="mt-2 bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
           onClick={() => selectedTextbookId && fetchProgressData(selectedTextbookId)}
         >
@@ -201,6 +242,7 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
     );
   }
 
+  // メインコンテンツ
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex justify-between items-center mb-6">
@@ -208,12 +250,13 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
           <BarChart2 className="mr-2" />
           スケジュール進捗状況
         </h2>
-        
+
         <div className="w-64">
           <select
             className="w-full p-2 border border-gray-300 rounded-md"
             value={selectedTextbookId || ''}
             onChange={(e) => setSelectedTextbookId(e.target.value ? Number(e.target.value) : undefined)}
+            disabled={textbooks.length === 0} // Disable if no textbooks
           >
             <option value="">参考書を選択</option>
             {textbooks.map((textbook) => (
@@ -224,23 +267,32 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
           </select>
         </div>
       </div>
-      
-      {progressData && (
+
+      {/* No textbook selected or no progress data */}
+      {!selectedTextbookId || !progressData ? (
+         <div className="text-center py-8 text-gray-500">
+           <BookOpen className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+           <p>表示する参考書を選択してください。</p>
+         </div>
+      ) : (
         <div>
-          {!progressData.hasSchedule ? (
+          {/* Case: No schedule found for the selected textbook */}
+          {progressData.hasSchedule === false ? (
             <div className="text-center py-8">
               <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
               <p className="text-lg text-gray-600">
-                {progressData.textbook.title}のスケジュールが設定されていません
+                「{progressData.textbook.title}」のスケジュールが設定されていません
               </p>
               <p className="text-sm text-gray-500 mt-2">
                 スケジュールを設定すると進捗状況を確認できます
               </p>
             </div>
           ) : (
+            // Case: Schedule exists, display progress details
             <>
               {/* 進捗サマリー */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* Overall Progress */}
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="flex items-center mb-2">
                     <BookOpen className="h-5 w-5 text-gray-500 mr-2" />
@@ -252,35 +304,39 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
                         {progressData.actualProgress}/{progressData.totalProblems}
                       </p>
                       <p className="text-sm text-gray-500">
-                        問題 ({Math.round((progressData.actualProgress / progressData.totalProblems) * 100)}%)
+                        問題 ({progressData.totalProblems > 0 ? Math.round((progressData.actualProgress / progressData.totalProblems) * 100) : 0}%)
                       </p>
                     </div>
-                    <div className="h-16 w-16 flex-shrink-0">
-                      <div className="w-full h-full rounded-full bg-gray-200 flex items-center justify-center relative">
-                        <div 
-                          className="absolute inset-0 rounded-full bg-primary"
-                          style={{ 
-                            clipPath: `polygon(0 0, 100% 0, 100% 100%, 0% 100%)`,
-                            opacity: 0.2
-                          }}
-                        ></div>
-                        <div 
-                          className="absolute inset-0 rounded-full"
-                          style={{ 
-                            clipPath: `polygon(50% 50%, 50% 0, ${50 + 50 * Math.cos(Math.PI * 2 * (progressData.actualProgress / progressData.totalProblems))}% ${50 - 50 * Math.sin(Math.PI * 2 * (progressData.actualProgress / progressData.totalProblems))}%, ${progressData.actualProgress / progressData.totalProblems > 0.75 ? '100% 100%, 0 100%, 0 0' : ''})`,
-                            background: '#3b82f6'
-                          }}
-                        ></div>
-                        <div className="bg-white rounded-full h-10 w-10 flex items-center justify-center z-10">
-                          <span className="text-xs font-medium">
-                            {Math.round((progressData.actualProgress / progressData.totalProblems) * 100)}%
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    {/* Progress Circle (Simplified) */}
+                    <div className="relative h-16 w-16">
+                       <svg className="w-full h-full" viewBox="0 0 36 36">
+                         <path
+                           className="text-gray-200"
+                           strokeWidth="3.8"
+                           stroke="currentColor"
+                           fill="none"
+                           d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                         />
+                         <path
+                           className="text-primary"
+                           strokeWidth="3.8"
+                           strokeDasharray={`${progressData.totalProblems > 0 ? (progressData.actualProgress / progressData.totalProblems) * 100 : 0}, 100`}
+                           strokeLinecap="round"
+                           stroke="currentColor"
+                           fill="none"
+                           d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                         />
+                       </svg>
+                       <div className="absolute inset-0 flex items-center justify-center">
+                         <span className="text-xs font-medium">
+                           {progressData.totalProblems > 0 ? Math.round((progressData.actualProgress / progressData.totalProblems) * 100) : 0}%
+                         </span>
+                       </div>
+                     </div>
                   </div>
                 </div>
-                
+
+                {/* Period Progress */}
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="flex items-center mb-2">
                     <Calendar className="h-5 w-5 text-gray-500 mr-2" />
@@ -292,7 +348,7 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
                         {progressData.elapsedDays}/{progressData.totalDays}
                       </p>
                       <p className="text-sm text-gray-500">
-                        日 ({Math.round((progressData.elapsedDays / progressData.totalDays) * 100)}%)
+                        日 ({progressData.totalDays > 0 ? Math.round((progressData.elapsedDays / progressData.totalDays) * 100) : 0}%)
                       </p>
                     </div>
                     <div>
@@ -301,13 +357,14 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
                     </div>
                   </div>
                   <div className="mt-2 bg-gray-200 h-2 rounded-full overflow-hidden">
-                    <div 
-                      className="bg-primary h-full" 
-                      style={{ width: `${(progressData.elapsedDays / progressData.totalDays) * 100}%` }}
+                    <div
+                      className="bg-primary h-full"
+                      style={{ width: `${progressData.totalDays > 0 ? (progressData.elapsedDays / progressData.totalDays) * 100 : 0}%` }}
                     ></div>
                   </div>
                 </div>
-                
+
+                {/* Status */}
                 <div className={`p-4 rounded-lg ${progressData.progressDifference >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
                   <div className="flex items-center mb-2">
                     <Clock className="h-5 w-5 text-gray-500 mr-2" />
@@ -324,8 +381,8 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
                         {progressData.progressStatus}
                       </p>
                       <p className="text-sm">
-                        {progressData.progressDifference >= 0 
-                          ? `予定より${progressData.progressDifference}問先行` 
+                        {progressData.progressDifference >= 0
+                          ? `予定より${progressData.progressDifference}問先行`
                           : `予定より${Math.abs(progressData.progressDifference)}問遅れ`}
                       </p>
                     </div>
@@ -337,260 +394,171 @@ const ScheduleProgressChart = ({ textbookId }: ScheduleProgressChartProps) => {
                   </div>
                 </div>
               </div>
-              
+
               {/* 進捗グラフ */}
               <div className="mt-8">
                 <h3 className="text-lg font-medium mb-4">累積進捗グラフ</h3>
                 <div className="relative h-64 border border-gray-200 rounded-lg p-4">
                   {/* Y軸 */}
-                  <div className="absolute left-0 top-0 bottom-0 w-12 flex flex-col justify-between text-xs text-gray-500 py-2">
+                  <div className="absolute left-0 top-0 bottom-0 w-12 flex flex-col justify-between text-xs text-gray-500 py-2 pr-1 text-right">
                     <span>{progressData.totalProblems}</span>
-                    <span>{Math.round(progressData.totalProblems * 0.75)}</span>
-                    <span>{Math.round(progressData.totalProblems * 0.5)}</span>
-                    <span>{Math.round(progressData.totalProblems * 0.25)}</span>
+                    {progressData.totalProblems > 0 && (
+                       <>
+                         <span>{Math.round(progressData.totalProblems * 0.75)}</span>
+                         <span>{Math.round(progressData.totalProblems * 0.5)}</span>
+                         <span>{Math.round(progressData.totalProblems * 0.25)}</span>
+                       </>
+                    )}
                     <span>0</span>
                   </div>
-                  
+
                   {/* グラフエリア */}
                   <div className="ml-12 h-full relative">
                     {/* 水平線 */}
-                    <div className="absolute w-full h-full flex flex-col justify-between">
+                    <div className="absolute w-full h-full flex flex-col justify-between border-l border-gray-200">
                       <div className="border-t border-gray-200"></div>
                       <div className="border-t border-gray-200"></div>
                       <div className="border-t border-gray-200"></div>
                       <div className="border-t border-gray-200"></div>
                       <div className="border-t border-gray-200"></div>
                     </div>
-                    
-                    {/* 理想的な進捗線 */}
-                    <div className="absolute inset-0">
-                      <svg className="w-full h-full">
-                        <line
-                          x1="0"
-                          y1="100%"
-                          x2="100%"
-                          y2="0"
-                          stroke="#9ca3af"
-                          strokeWidth="2"
-                          strokeDasharray="4"
-                        />
-                      </svg>
-                    </div>
-                    
-                    {/* 実際の進捗線 */}
-                    {progressData.cumulativeData && progressData.cumulativeData.length > 0 && (
-                      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <polyline
-                          points={progressData.cumulativeData.map((point: any, index: number) => {
-                            // Handle division by zero for x coordinate
-                            const numPoints = progressData.cumulativeData.length;
-                            const x = numPoints > 1 
-                              ? (index / (numPoints - 1)) * 100 
-                              : 0; // If only one point, place it at the start (0%)
-                            
-                            // Handle division by zero for y coordinate
-                            const y = progressData.totalProblems > 0
-                              ? 100 - (point.actual / progressData.totalProblems) * 100
-                              : 100; // If totalProblems is 0, y is 100% (bottom of the graph)
-                              
-                            // Ensure x and y are valid finite numbers before returning the string
-                            const finalX = Number.isFinite(x) ? x : 0;
-                            const finalY = Number.isFinite(y) ? y : 100; // Default to bottom if y is not finite
-                            
-                            // Round to avoid overly long decimals (optional but can help)
-                            const roundedX = finalX.toFixed(2);
-                            const roundedY = finalY.toFixed(2);
 
-                            // Return plain numbers, not percentages, for the points attribute
-                            return `${roundedX},${roundedY}`; 
+                    {/* 理想的な進捗線 */}
+                    <svg className="absolute inset-0 w-full h-full overflow-visible">
+                      <line
+                        x1="0%"
+                        y1="100%"
+                        x2="100%"
+                        y2="0%"
+                        stroke="#9ca3af" // gray-400
+                        strokeWidth="2"
+                        strokeDasharray="4"
+                      />
+                    </svg>
+
+                    {/* 実際の進捗線 */}
+                    {progressData.cumulativeData && progressData.cumulativeData.length > 0 && progressData.totalProblems > 0 && (
+                      <svg className="absolute inset-0 w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <polyline
+                          points={progressData.cumulativeData.map((point) => {
+                            const pointDate = parseISO(point.date);
+                            const scheduleStartDate = parseISO(progressData.schedule.start_date);
+                            if (!isValid(pointDate) || !isValid(scheduleStartDate)) return '0,100'; // Default point if dates invalid
+
+                            // Calculate x based on the number of days from start
+                            const dayIndex = differenceInDays(pointDate, scheduleStartDate); // No +1 needed here for index
+                            const x = progressData.totalDays > 0 ? (dayIndex / (progressData.totalDays -1)) * 100 : 0; // Use totalDays-1 for 0-based index scaling
+                            const y = 100 - (point.actual / progressData.totalProblems) * 100;
+                            const finalX = Number.isFinite(x) ? Math.min(100, Math.max(0, x)) : 0;
+                            const finalY = Number.isFinite(y) ? Math.min(100, Math.max(0, y)) : 100;
+                            return `${finalX.toFixed(2)},${finalY.toFixed(2)}`;
                           }).join(' ')}
                           fill="none"
-                          stroke="#3b82f6"
-                          strokeWidth="3"
+                          stroke="#3b82f6" // primary color
+                          strokeWidth="0.8" // Use relative stroke width
                         />
                       </svg>
                     )}
-                    
+
                     {/* 模試と試験のマーカー */}
-                    <svg className="w-full h-full absolute top-0 left-0 pointer-events-none">
-                      {/* 模試のマーカー（ライン表示） */}
-                      {mockExams.map((mockExam, index) => {
-                        // 日付文字列を正規化（YYYY/MM/DD または YYYY-MM-DD 形式に）
-                        const dateStr = mockExam.date.replace(/(\d{4})[^\d]?(\d{2})[^\d]?(\d{2})/, '$1/$2/$3');
-                        const mockExamDate = new Date(dateStr);
-                        
-                        // スケジュールの日付範囲を取得
-                        const scheduleStartStr = progressData.schedule.start_date.replace(/(\d{4})[^\d]?(\d{2})[^\d]?(\d{2})/, '$1/$2/$3');
-                        const scheduleEndStr = progressData.schedule.end_date.replace(/(\d{4})[^\d]?(\d{2})[^\d]?(\d{2})/, '$1/$2/$3');
-                        const startDate = new Date(scheduleStartStr);
-                        const endDate = new Date(scheduleEndStr);
-                        
-                        // 全ての模試を表示（日付範囲のフィルタリングを一時的に無効化）
-                        const position = (mockExamDate.getTime() - startDate.getTime()) / 
-                                        (endDate.getTime() - startDate.getTime()) * 100;
-                        
-                        // 位置が0%〜100%の範囲内にある場合のみ表示
+                    <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none">
+                      {/* Combine mockExams and exams (both are now Exam[]) */}
+                      {[...mockExams, ...exams].map((event, index) => {
+                        // Use the is_mock flag from the shared Exam type
+                        const isMock = event.is_mock;
+                        const eventDateStr = event.date; // Use 'date' from shared Exam type
+                        const eventType = event.exam_type; // Use 'exam_type' string from shared Exam type
+
+                        let eventDate: Date;
+                        try {
+                           eventDate = parseISO(eventDateStr); // Use parseISO
+                           if (!isValid(eventDate)) throw new Error(); // Use isValid
+                        } catch { return null; } // Skip if date is invalid
+
+                        const scheduleStartDate = parseISO(progressData.schedule.start_date); // Use parseISO
+                        const scheduleEndDate = parseISO(progressData.schedule.end_date); // Use parseISO
+
+                        // Use isValid for date validation
+                        if (!isValid(scheduleStartDate) || !isValid(scheduleEndDate) || !isValid(eventDate) || differenceInDays(scheduleEndDate, scheduleStartDate) <= 0) return null;
+
+                        // Calculate position using differenceInDays for total duration
+                        const totalDurationDays = differenceInDays(scheduleEndDate, scheduleStartDate);
+                        const eventOffsetDays = differenceInDays(eventDate, scheduleStartDate);
+                        const position = totalDurationDays > 0 ? (eventOffsetDays / totalDurationDays) * 100 : 0;
+
+
                         if (position >= 0 && position <= 100) {
-                          return (
-                            <line
-                              key={`mock-${index}`}
-                              x1={`${position}%`}
-                              y1="0%"
-                              x2={`${position}%`}
-                              y2="100%"
-                              stroke="#f59e0b" // 黄色系
-                              strokeWidth="2"
-                              strokeDasharray="4"
-                            />
-                          );
-                        }
-                        return null;
-                      })}
-                      
-                      {/* 試験のマーカー（ライン表示） */}
-                      {exams.map((exam, index) => {
-                        // 日付文字列を正規化
-                        const dateStr = exam.exam_date.replace(/(\d{4})[^\d]?(\d{2})[^\d]?(\d{2})/, '$1/$2/$3');
-                        const examDate = new Date(dateStr);
-                        
-                        // スケジュールの日付範囲を取得
-                        const scheduleStartStr = progressData.schedule.start_date.replace(/(\d{4})[^\d]?(\d{2})[^\d]?(\d{2})/, '$1/$2/$3');
-                        const scheduleEndStr = progressData.schedule.end_date.replace(/(\d{4})[^\d]?(\d{2})[^\d]?(\d{2})/, '$1/$2/$3');
-                        const startDate = new Date(scheduleStartStr);
-                        const endDate = new Date(scheduleEndStr);
-                        
-                        // 全ての試験を表示（日付範囲のフィルタリングを一時的に無効化）
-                        const position = (examDate.getTime() - startDate.getTime()) / 
-                                        (endDate.getTime() - startDate.getTime()) * 100;
-                        
-                        // 位置が0%〜100%の範囲内にある場合のみ表示
-                        if (position >= 0 && position <= 100) {
-                          // 試験タイプに応じた色を設定
-                          let color = "#9ca3af"; // デフォルト色
-                          if (exam.exam_type.includes("共通") || exam.exam_type.includes("共テ")) {
-                            color = "#ef4444"; // 赤色系
-                          } else if (exam.exam_type.includes("二次")) {
-                            color = "#8b5cf6"; // 紫色系
-                          } else if (exam.exam_type.toLowerCase().includes("模試")) {
-                            color = "#f59e0b"; // 黄色系（模試）
+                          let color = "#9ca3af"; // default gray
+                          if (isMock) {
+                              color = "#f59e0b"; // yellow
+                          // Color logic might need adjustment based on exam_type string values or name
+                          } else if (eventType === 'common_test' || event.name.includes("共通") || event.name.includes("共テ")) { // Example adjustment
+                              color = "#ef4444"; // red
+                          } else if (eventType === 'secondary' || event.name.includes("二次")) { // Example adjustment
+                              color = "#8b5cf6"; // purple
                           }
-                          
+
                           return (
                             <line
-                              key={`exam-${index}`}
+                              key={`${isMock ? 'mock' : 'exam'}-${event.id || index}`}
                               x1={`${position}%`}
                               y1="0%"
                               x2={`${position}%`}
                               y2="100%"
                               stroke={color}
-                              strokeWidth="2"
-                              strokeDasharray="4"
+                              strokeWidth="0.5" // Use relative stroke width
+                              strokeDasharray="2 2" // Use relative dash array
                             />
                           );
                         }
                         return null;
                       })}
                     </svg>
-                    
+
                     {/* 今日の位置 */}
-                    <div 
-                      className="absolute top-0 bottom-0 border-l-2 border-red-400"
-                      style={{ 
-                        left: `${(progressData.elapsedDays / progressData.totalDays) * 100}%`,
-                        display: progressData.elapsedDays < progressData.totalDays ? 'block' : 'none'
-                      }}
-                    >
-                      <div className="absolute -top-2 -translate-x-1/2 bg-red-400 text-white text-xs px-1 rounded">
-                        今日
-                      </div>
-                    </div>
+                    {progressData.elapsedDays < progressData.totalDays && progressData.totalDays > 0 && (
+                       <div
+                         className="absolute top-0 bottom-0 border-l-2 border-red-400"
+                         style={{
+                           left: `${(progressData.elapsedDays / progressData.totalDays) * 100}%`,
+                         }}
+                       >
+                         <div className="absolute -top-5 -translate-x-1/2 bg-red-400 text-white text-xs px-1 rounded">
+                           今日
+                         </div>
+                       </div>
+                    )}
                   </div>
-                  
+
                   {/* X軸 */}
-                  <div className="absolute left-12 right-0 bottom-0 flex justify-between text-xs text-gray-500">
+                  <div className="absolute left-12 right-0 -bottom-5 flex justify-between text-xs text-gray-500">
                     <span>{formatDate(progressData.schedule.start_date)}</span>
                     <span>{formatDate(progressData.schedule.end_date)}</span>
                   </div>
-                  
+
                   {/* 凡例 */}
-                  <div className="absolute top-2 right-2 flex flex-col items-start text-xs space-y-1">
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-blue-500 mr-1"></div>
-                      <span>実際の進捗</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-0 border-t-2 border-dashed border-gray-400 mr-1"></div>
-                      <span>理想的な進捗</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-0 border-l-2 border-dashed border-yellow-500 mr-1"></div>
-                      <span>模試</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-0 border-l-2 border-dashed border-red-500 mr-1"></div>
-                      <span>共通テスト</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-0 border-l-2 border-dashed border-purple-500 mr-1"></div>
-                      <span>二次試験</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* 日別の進捗比較 */}
-              <div className="mt-8">
-                <h3 className="text-lg font-medium mb-4">日別の進捗比較</h3>
-                <div className="overflow-x-auto">
-                  <div className="min-w-full" style={{ height: '200px' }}>
-                    <div className="flex h-full">
-                      {progressData.dailyData && progressData.dailyData.map((day: any, index: number) => {
-                        const actual = day.actual;
-                        const planned = day.planned;
-                        
-                        // 最大値を計算
-                        const maxValue = Math.max(
-                          ...progressData.dailyData.map((d: any) => 
-                            Math.max(d.actual, d.planned)
-                          )
-                        );
-                        
-                        // 高さを計算（0 除算を防ぐ）
-                        const actualHeight = maxValue > 0 ? (actual / maxValue) * 150 : 0;
-                        const plannedHeight = maxValue > 0 ? (planned / maxValue) * 150 : 0;
-                        
-                        return (
-                          <div key={index} className="flex flex-col justify-end items-center mx-1" style={{ width: '30px' }}>
-                            <div className="w-full flex flex-col items-center">
-                              <div 
-                                className="w-full bg-blue-500"
-                                style={{ height: `${actualHeight}px` }}
-                              ></div>
-                              <div 
-                                className="w-full bg-gray-300 mt-1"
-                                style={{ height: `${plannedHeight}px` }}
-                              ></div>
-                            </div>
-                            <div className="text-xs mt-1 transform -rotate-45 origin-top-left whitespace-nowrap">
-                              {formatDate(day.date)}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* 凡例 */}
-                <div className="flex items-center justify-center mt-8 text-sm">
-                  <div className="flex items-center mr-4">
-                    <div className="w-4 h-4 bg-blue-500 mr-1"></div>
-                    <span>実際の学習量</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 bg-gray-300 mr-1"></div>
-                    <span>予定の学習量</span>
-                  </div>
+                  <div className="absolute top-2 right-2 flex flex-col items-start text-xs space-y-1 bg-white bg-opacity-75 p-1 rounded">
+                     <div className="flex items-center">
+                       <div className="w-3 h-0.5 bg-blue-500 mr-1"></div>
+                       <span>実際の進捗</span>
+                     </div>
+                     <div className="flex items-center">
+                       <div className="w-3 h-0 border-t-2 border-dashed border-gray-400 mr-1"></div>
+                       <span>理想的な進捗</span>
+                     </div>
+                     <div className="flex items-center">
+                       <div className="w-0.5 h-3 border-l-2 border-dashed border-yellow-500 mr-1"></div>
+                       <span>模試</span>
+                     </div>
+                     <div className="flex items-center">
+                       <div className="w-0.5 h-3 border-l-2 border-dashed border-red-500 mr-1"></div>
+                       <span>共通テスト</span>
+                     </div>
+                     <div className="flex items-center">
+                       <div className="w-0.5 h-3 border-l-2 border-dashed border-purple-500 mr-1"></div>
+                       <span>二次試験</span>
+                     </div>
+                   </div>
                 </div>
               </div>
             </>

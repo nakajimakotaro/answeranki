@@ -1,18 +1,23 @@
 import { useState, useEffect } from 'react';
-import { scheduleService, University, ExamDate } from '../services/scheduleService';
+import { parseISO, differenceInDays, startOfToday, isBefore, isValid, format } from 'date-fns'; // Import date-fns functions, add format
+import { scheduleService, University, TimelineEvent } from '../services/scheduleService'; // Removed ExamDate import
+import { examService } from '../services/examService'; // Import examService
+import { Exam, ExamInput } from '../../../shared/types/exam'; // Import shared Exam and ExamInput types
+// UniversityExamType might still be used for the dropdown, keep it for now or replace if needed
+import { UniversityExamType } from '../types/schedule';
 import { GraduationCap, Plus, Edit, Trash, Calendar } from 'lucide-react';
 
 const UniversitiesPage = () => {
   // 状態管理
   const [universities, setUniversities] = useState<University[]>([]);
-  const [exams, setExams] = useState<ExamDate[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]); // Use shared Exam type
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUniversityModalOpen, setIsUniversityModalOpen] = useState(false);
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
   const [editingUniversity, setEditingUniversity] = useState<University | null>(null);
-  const [editingExam, setEditingExam] = useState<ExamDate | null>(null);
-  
+  const [editingExam, setEditingExam] = useState<Exam | null>(null); // Use shared Exam type
+
   // 大学フォーム状態
   const [name, setName] = useState('');
   const [rank, setRank] = useState<number | undefined>(undefined);
@@ -21,7 +26,8 @@ const UniversitiesPage = () => {
   // 受験日フォーム状態
   const [universityId, setUniversityId] = useState<number | undefined>(undefined);
   const [examDate, setExamDate] = useState('');
-  const [examType, setExamType] = useState('');
+  // Initialize with a default valid value or handle empty string case
+  const [examType, setExamType] = useState<UniversityExamType | ''>(''); // Allow empty string initially
   
   // データ取得
   useEffect(() => {
@@ -32,13 +38,30 @@ const UniversitiesPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [universitiesData, examsData] = await Promise.all([
+      // getUniversities と getTimelineEvents を並行して取得
+      const [universitiesData, timelineEvents] = await Promise.all([
         scheduleService.getUniversities(),
-        scheduleService.getExams()
+        scheduleService.getTimelineEvents() // getExams() から変更
       ]);
-      
+
+      // timelineEvents から exam タイプのデータのみを抽出
+      // TimelineEvent の details が Exam 型であることを想定
+      const examsData = timelineEvents
+        .filter((event): event is TimelineEvent & { details: Exam } => event.type === 'exam' || event.type === 'mock_exam') // Include mock exams too
+        .map(event => {
+          // event.id (例: "exam-5") から数値のIDを抽出 (Ensure details has id)
+          const examId = event.details.id; // Use id directly from details
+          // 大学名を取得
+          const universityName = universitiesData.find(u => u.id === event.details.university_id)?.name;
+          return {
+            ...event.details,
+            id: examId, // 数値のIDを設定
+            university_name: universityName // 大学名を設定
+          };
+        });
+
       setUniversities(universitiesData);
-      setExams(examsData);
+      setExams(examsData); // 抽出した受験日データをセット
       setLoading(false);
     } catch (err) {
       console.error('Error fetching data:', err);
@@ -70,27 +93,34 @@ const UniversitiesPage = () => {
     setEditingExam(null);
     setUniversityId(university?.id);
     setExamDate('');
-    setExamType('');
+    setExamType(''); // Reset to empty string
     setIsExamModalOpen(true);
   };
   
   // 受験日モーダルを開く（編集）
-  const openEditExamModal = (exam: ExamDate) => {
+  const openEditExamModal = (exam: Exam) => { // Use shared Exam type
     setEditingExam(exam);
-    setUniversityId(exam.university_id);
-    setExamDate(exam.exam_date);
-    setExamType(exam.exam_type);
+    setUniversityId(exam.university_id ?? undefined); // Handle null case
+    setExamDate(exam.date); // Use 'date'
+    // exam.exam_type is now string, need to check if it's a valid UniversityExamType for the dropdown
+    // If the dropdown uses UniversityExamType, we might need a mapping or ensure DB stores compatible values
+    // For now, assume it might be compatible or handle potential mismatch
+    setExamType(exam.exam_type as UniversityExamType | ''); // Cast for now, might need refinement
     setIsExamModalOpen(true);
   };
-  
+
   // 大学を保存
   const handleSaveUniversity = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!name) {
-      setError('大学名は必須です');
-      return;
+
+    // --- Frontend Validation ---
+    if (!name || name.trim() === '') {
+      setError('大学名は必須であり、空にできません');
+      return; // Prevent form submission
     }
+    // Clear previous error if validation passes
+    setError(null);
+    // --- End Validation ---
     
     try {
       const universityData: University = {
@@ -124,6 +154,12 @@ const UniversitiesPage = () => {
   const handleSaveExam = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Check if examType is a valid UniversityExamType before proceeding
+    if (!examType) {
+      setError('試験種別を選択してください');
+      return;
+    }
+
     // 模試の場合は大学IDは必須ではない
     if (examType !== '模試' && !universityId) {
       setError('大学は必須です');
@@ -136,18 +172,28 @@ const UniversitiesPage = () => {
     }
     
     try {
-      const examData: ExamDate = {
-        university_id: examType === '模試' ? 0 : universityId!, // 模試の場合はnullになるようにAPI側で処理
-        exam_date: examDate,
-        exam_type: examType
+      // Ensure examType is not an empty string before creating examData
+      if (!examType) {
+        // This case should be caught by the earlier check, but adding for safety
+        setError('試験種別が選択されていません');
+        return;
+      }
+      // Use ExamInput type and correct properties
+      const examData: ExamInput = {
+        name: `${universities.find(u => u.id === universityId)?.name || '模試'} ${examType}`, // Generate a name
+        date: examDate,
+        is_mock: examType === '模試',
+        exam_type: examType, // examType is string, matches ExamInput
+        university_id: examType === '模試' ? null : universityId, // Use null for mocks
+        // notes: '', // Add notes if needed
       };
-      
+
       if (editingExam && editingExam.id) {
-        // 既存の受験日を更新
-        await scheduleService.updateExam(editingExam.id, examData);
+        // 既存の受験日を更新 using examService
+        await examService.updateExam(editingExam.id, examData);
       } else {
-        // 新しい受験日を作成
-        await scheduleService.createExam(examData);
+        // 新しい受験日を作成 using examService
+        await examService.createExam(examData);
       }
       
       // データを再取得
@@ -186,10 +232,11 @@ const UniversitiesPage = () => {
     if (!confirm('この受験日を削除してもよろしいですか？')) {
       return;
     }
-    
+
     try {
-      await scheduleService.deleteExam(id);
-      
+      // Use examService to delete
+      await examService.deleteExam(id);
+
       // データを再取得
       await fetchData();
       
@@ -198,17 +245,29 @@ const UniversitiesPage = () => {
       setError('受験日の削除中にエラーが発生しました');
     }
   };
-  
-  // 残り日数を計算
-  const calculateDaysRemaining = (examDate: string): number => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const date = new Date(examDate);
-    const diffTime = date.getTime() - today.getTime();
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  // 残り日数を計算 (date-fns を使用) - Use 'date' property
+  const calculateDaysRemaining = (date: string | null | undefined): number => {
+    // Check if date is a valid string before parsing
+    if (!date) {
+      // Handle null, undefined, or empty string case appropriately
+      // Returning NaN to indicate an invalid input
+      return NaN;
+    }
+
+    const todayDate = startOfToday();
+    const parsedDate = parseISO(date); // Use 'date' variable
+
+    // Check if parsing was successful and the date is not in the past
+    if (!isValid(parsedDate) || isBefore(parsedDate, todayDate)) {
+      // Consider if 0 is the right return value for past dates vs. invalid dates
+      return 0; // Return 0 if date is invalid or in the past
+    }
+
+    // differenceInDays calculates full days, add 1 for inclusive count
+    return differenceInDays(parsedDate, todayDate) + 1;
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full">
@@ -324,25 +383,34 @@ const UniversitiesPage = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {exams.length > 0 ? (
-                exams.map((exam) => {
-                  const daysRemaining = calculateDaysRemaining(exam.exam_date);
+                exams.map((exam) => { // exam is now of type Exam
+                  // calculateDaysRemaining now accepts potentially null/undefined dates
+                  const daysRemaining = calculateDaysRemaining(exam.date); // Use exam.date
+                  const displayDays = !isNaN(daysRemaining) ? daysRemaining : null; // Handle NaN case
+
                   return (
                     <tr key={exam.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {exam.exam_type === '模試' && !exam.university_name ? '全国模試' : exam.university_name}
+                          {/* Use exam.name or exam.university_name based on is_mock */}
+                          {exam.is_mock ? exam.name : exam.university_name || exam.name}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{exam.exam_type}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{exam.exam_date}</td>
+                      {/* Display exam.name or a formatted type */}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{exam.is_mock ? '模試' : exam.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{exam.date || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          daysRemaining <= 7 ? 'bg-red-100 text-red-800' : 
-                          daysRemaining <= 30 ? 'bg-yellow-100 text-yellow-800' : 
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {daysRemaining > 0 ? `残り${daysRemaining}日` : '受験日当日'}
-                        </span>
+                        {displayDays !== null ? ( // Check if daysRemaining is a valid number
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            displayDays <= 7 ? 'bg-red-100 text-red-800' :
+                            displayDays <= 30 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {displayDays > 0 ? `残り${displayDays}日` : '受験日当日'}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">日付無効</span> // Display for invalid/missing date
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
@@ -458,7 +526,8 @@ const UniversitiesPage = () => {
                 <select
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                   value={examType}
-                  onChange={(e) => setExamType(e.target.value)}
+                  // Cast the value to the specific type alias
+                  onChange={(e) => setExamType(e.target.value as UniversityExamType | '')}
                   required
                 >
                   <option value="">種別を選択してください</option>
@@ -485,8 +554,8 @@ const UniversitiesPage = () => {
                 />
               </div>
               
-              {/* 模試以外の場合は大学選択を表示 */}
-              {examType !== '模試' && (
+              {/* 模試以外の場合、かつ examType が選択されている場合に大学選択を表示 */}
+              {examType && examType !== '模試' && (
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     大学
@@ -495,7 +564,7 @@ const UniversitiesPage = () => {
                     className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                     value={universityId || ''}
                     onChange={(e) => setUniversityId(e.target.value ? Number(e.target.value) : undefined)}
-                    required={examType !== '模試'}
+                    required={true} // Always required when this block is rendered
                   >
                     <option value="">大学を選択してください</option>
                     {universities.map((university) => (

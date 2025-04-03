@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { scheduleService, Textbook, StudyLog, ExamDate } from '../services/scheduleService';
-import { ankiConnectService } from '../services/ankiConnectService';
+import { format, parseISO, differenceInDays, startOfToday, isBefore, isValid, compareAsc } from 'date-fns'; // Import date-fns functions
+import { scheduleService, Textbook, StudyLog, TimelineEvent } from '../services/scheduleService';
+import { Exam } from '../types/exam'; // Import Exam type
 import DailyLogInput from '../components/DailyLogInput';
 import { Calendar, ChevronRight, BookOpen, GraduationCap, Clock } from 'lucide-react';
 
@@ -32,36 +33,42 @@ const Dashboard = () => {
   // 状態管理
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [studyLogs, setStudyLogs] = useState<StudyLog[]>([]);
-  const [exams, setExams] = useState<ExamDate[]>([]);
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]); // Add state for timeline events
   const [progress, setProgress] = useState<CalculatedProgress[]>([]);
   const [countdowns, setCountdowns] = useState<ExamCountdown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [today] = useState(new Date().toISOString().split('T')[0]);
+  const [today] = useState(format(new Date(), 'yyyy-MM-dd')); // Use format for today's date string
 
   // データ取得
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
-        // 参考書、学習ログ、受験日を取得
-        const [textbooksData, logsData, examsData] = await Promise.all([
+        setError(null); // Reset error
+
+        // 参考書、学習ログ、タイムラインイベントを取得
+        const [textbooksData, logsData, timelineEventsData] = await Promise.all([
           scheduleService.getTextbooks(),
           scheduleService.getLogs({ start_date: today, end_date: today }),
-          scheduleService.getExams()
+          scheduleService.getTimelineEvents() // Fetch all timeline events (no date range needed for countdown)
         ]);
-        
+
         setTextbooks(textbooksData);
         setStudyLogs(logsData);
-        setExams(examsData);
-        
+        setTimelineEvents(timelineEventsData); // Store timeline events
+
         // 進捗情報を計算
         await calculateProgress(textbooksData, logsData);
-        
-        // 受験日カウントダウンを計算
-        calculateExamCountdowns(examsData);
-        
+
+        // 受験日カウントダウンを計算 (timelineEventsDataから試験情報を抽出)
+        // Filter for 'exam' and 'mock_exam' types and assert details as Exam type
+        const examEvents = timelineEventsData.filter(
+          (event): event is TimelineEvent & { details: Exam } =>
+            (event.type === 'exam' || event.type === 'mock_exam') && typeof event.details === 'object' && event.details !== null && 'date' in event.details && 'name' in event.details
+        );
+        calculateExamCountdowns(examEvents.map(e => e.details)); // Pass Exam details
+
         setLoading(false);
       } catch (err) {
         console.error('Dashboard data loading error:', err);
@@ -110,30 +117,39 @@ const Dashboard = () => {
     }
   };
 
-  // 受験日カウントダウンの計算
-  const calculateExamCountdowns = (examDates: ExamDate[]) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const countdownData = examDates
-      .filter(exam => {
-        const examDate = new Date(exam.exam_date);
-        return examDate >= today;
-      })
+  // 受験日カウントダウンの計算 (date-fns を使用, Exam 型を受け入れるように修正)
+  const calculateExamCountdowns = (exams: Exam[]) => {
+    const todayDate = startOfToday(); // Get today's date at midnight
+
+    const countdownData = exams
       .map(exam => {
-        const examDate = new Date(exam.exam_date);
-        const diffTime = examDate.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
+        // exam.date is guaranteed to exist by the filter before this function call.
+        const examDate = parseISO(exam.date); // Use exam.date
+        // Keep isBefore check as it's application logic, not data validation.
+        if (isBefore(examDate, todayDate)) {
+          return null; // Skip past dates
+        }
+        // differenceInDays calculates full days, add 1 for inclusive count
+        const diffDays = differenceInDays(examDate, todayDate) + 1;
+
+        // Map Exam properties to ExamCountdown properties
+        // exam.is_mock の値に基づいて '模試' または '本番' を設定
+        const displayExamType = exam.is_mock ? '模試' : '本番';
+
         return {
-          universityName: exam.university_name || '不明',
-          examType: exam.exam_type,
+          universityName: exam.name || '不明', // Use exam.name
+          // examType には判定結果（'模試' or '本番'）を入れる
+          examType: displayExamType,
           daysRemaining: diffDays,
-          examDate: exam.exam_date
+          examDate: exam.date, // Use exam.date
+          // Store the parsed date for sorting
+          parsedDate: examDate
         };
       })
-      .sort((a, b) => a.daysRemaining - b.daysRemaining);
-    
+      .filter((item): item is NonNullable<typeof item> => item !== null) // Remove null entries
+      // Sort by parsed date using compareAsc
+      .sort((a, b) => compareAsc(a.parsedDate, b.parsedDate));
+
     setCountdowns(countdownData.slice(0, 3)); // 上位3つのみ表示
   };
 
@@ -189,24 +205,16 @@ const Dashboard = () => {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {countdowns.map((countdown, index) => {
-              // 試験種別に応じた色を設定
-              const borderColor = countdown.examType === '模試' 
-                ? 'border-yellow-500' 
-                : countdown.examType === '共通テスト' || countdown.examType === '共テ'
-                  ? 'border-red-500'
-                  : countdown.examType === '二次試験' || countdown.examType === '二次'
-                    ? 'border-purple-500'
-                    : 'border-primary';
-              
+              // 試験種別（'模試' or '本番'）に応じた色を設定
+              const borderColor = countdown.examType === '模試'
+                ? 'border-yellow-500' // 模試は黄色
+                : 'border-blue-500';   // 本番は青色 (例: primary color)
+
               // テキスト色も設定
-              const textColor = countdown.examType === '模試' 
-                ? 'text-yellow-600' 
-                : countdown.examType === '共通テスト' || countdown.examType === '共テ'
-                  ? 'text-red-600'
-                  : countdown.examType === '二次試験' || countdown.examType === '二次'
-                    ? 'text-purple-600'
-                    : 'text-primary';
-              
+              const textColor = countdown.examType === '模試'
+                ? 'text-yellow-600' // 模試は黄色系
+                : 'text-blue-600';   // 本番は青色系 (例: primary color)
+
               return (
                 <div key={index} className={`bg-white rounded-lg shadow p-4 border-l-4 ${borderColor}`}>
                   <div className="flex justify-between items-start">
