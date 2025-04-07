@@ -10,8 +10,6 @@ dotenv.config({ path: envPath });
 
 import express, { Request, Response } from 'express';
 import { setupMediaRoutes } from './services/mediaServer.js';
-import { initDatabase } from './db/database.js';
-import { runMigrations } from './db/migrate.js';
 import * as trpcExpress from '@trpc/server/adapters/express';
 import { appRouter } from './router.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -25,14 +23,6 @@ const app = express();
 // Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Initialize database and run migrations
-initDatabase()
-  .then(() => runMigrations())
-  .catch((err: Error) => { // Added type annotation for err
-    console.error('Failed to initialize database or run migrations:', err);
-    process.exit(1);
-  });
 
 // Set up API routes
 // setupAnkiConnectProxy(app); // Removed old proxy setup

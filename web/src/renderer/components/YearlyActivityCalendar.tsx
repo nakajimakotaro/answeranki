@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
-import { getYear, getDaysInYear, startOfYear, getDay, addDays, format, getDate, getMonth, parseISO } from 'date-fns'; // Import date-fns functions
-import { scheduleService, YearlyLogData } from '../services/scheduleService.js';
-import { Calendar, BookOpen, Filter, BarChart2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { getYear, getDaysInYear, startOfYear, getDay, addDays, format, getDate, getMonth } from 'date-fns'; // Import date-fns functions, removed parseISO as it's not used directly here anymore
+import { trpc } from '../lib/trpc'; // Import tRPC client
+import { Calendar, Filter, BarChart2 } from 'lucide-react'; // Removed BookOpen as filter/stats are removed
 
 interface YearlyActivityCalendarProps {
   year?: number;
-  initialFilterType?: 'all' | 'textbook' | 'subject';
-  initialFilterId?: number;
-  initialFilterSubject?: string;
+  // Filter props kept for potential future re-implementation, but functionality removed
+  // initialFilterType?: 'all' | 'textbook' | 'subject';
+  // initialFilterId?: number;
+  // initialFilterSubject?: string;
 }
 
 /**
@@ -15,51 +16,26 @@ interface YearlyActivityCalendarProps {
  */
 const YearlyActivityCalendar = ({
   year = getYear(new Date()), // Use getYear for default year
-  initialFilterType = 'all',
-  initialFilterId,
-  initialFilterSubject
 }: YearlyActivityCalendarProps) => {
   // 状態管理
-  const [yearlyData, setYearlyData] = useState<YearlyLogData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(year);
-  const [filterType, setFilterType] = useState<'all' | 'textbook' | 'subject'>(initialFilterType);
-  const [selectedTextbookId, setSelectedTextbookId] = useState<number | undefined>(initialFilterId);
-  const [selectedSubject, setSelectedSubject] = useState<string | undefined>(initialFilterSubject);
   const [hoveredDay, setHoveredDay] = useState<{date: string, amount: number} | null>(null);
 
-  // 年間データの取得
-  useEffect(() => {
-    fetchYearlyData();
-  }, [selectedYear, filterType, selectedTextbookId, selectedSubject]);
-
-  // 年間データを取得する
-  const fetchYearlyData = async () => {
-    try {
-      setLoading(true);
-      
-      const params: any = { year: selectedYear };
-      
-      if (filterType === 'textbook' && selectedTextbookId) {
-        params.textbook_id = selectedTextbookId;
-      } else if (filterType === 'subject' && selectedSubject) {
-        params.subject = selectedSubject;
-      }
-      
-      const data = await scheduleService.getYearlyLogs(params);
-      setYearlyData(data);
-      setLoading(false);
-    } catch (err) {
-      console.error('Error fetching yearly data:', err);
-      setError('年間データの取得中にエラーが発生しました');
-      setLoading(false);
+  // --- tRPC Query ---
+  const { data: yearlyLogAmounts, isLoading, error: queryError } = trpc.schedule.getYearlyLogs.useQuery(
+    { year: selectedYear },
+    {
+      staleTime: 5 * 60 * 1000, // Cache data for 5 minutes
+      refetchOnWindowFocus: false, // Optional: prevent refetch on window focus
     }
-  };
+  );
+  // --- End tRPC Query ---
+
 
   // 年間の日付データを生成
   const calendarData = useMemo(() => {
-    if (!yearlyData) return {
+    // Use yearlyLogAmounts from tRPC query (Record<string, number>)
+    if (!yearlyLogAmounts) return {
       days: [],
       weeks: [],
       maxAmount: 0
@@ -75,18 +51,18 @@ const YearlyActivityCalendar = ({
       const date = addDays(yearStartDate, i); // Calculate each day using addDays
       const dateString = format(date, 'yyyy-MM-dd'); // Format date string using date-fns
 
-      // ログデータから該当日の学習量を取得
-      const logEntry = yearlyData.logs.find(log => log.date === dateString);
-      
+      // Get the amount for the specific date from the yearlyLogAmounts record
+      const amount = yearlyLogAmounts[dateString] || 0;
+
       return {
         date: dateString,
         day: getDate(date), // Use getDate from date-fns
         month: getMonth(date), // Use getMonth from date-fns
         dayOfWeek: getDay(date), // Use getDay from date-fns
-        amount: logEntry ? logEntry.total_amount : 0
+        amount: amount // Use the amount from the record
       };
     });
-    
+
     // 最大値を計算（色の強度計算用）
     const maxAmount = Math.max(...allDays.map(day => day.amount), 1);
     
@@ -119,7 +95,7 @@ const YearlyActivityCalendar = ({
       weeks,
       maxAmount
     };
-  }, [yearlyData, selectedYear]);
+  }, [yearlyLogAmounts, selectedYear]); // Updated dependency array
 
   // 色の強度を計算
   const getColorClass = (amount: number) => {
@@ -149,16 +125,10 @@ const YearlyActivityCalendar = ({
   // 曜日の名前
   const dayOfWeekNames = ['日', '月', '火', '水', '木', '金', '土'];
 
-  // フィルタータイプを変更
-  const handleFilterTypeChange = (type: 'all' | 'textbook' | 'subject') => {
-    setFilterType(type);
-    
-    // フィルタータイプが変わったら選択をリセット
-    if (type !== 'textbook') setSelectedTextbookId(undefined);
-    if (type !== 'subject') setSelectedSubject(undefined);
-  };
+  // Filter logic removed as the endpoint doesn't support it currently
+  // const handleFilterTypeChange = ...
 
-  if (loading && !yearlyData) {
+  if (isLoading) { // Use isLoading from useQuery
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -166,19 +136,18 @@ const YearlyActivityCalendar = ({
     );
   }
 
-  if (error) {
-    return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        <p>{error}</p>
-        <button 
-          className="mt-2 bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
-          onClick={fetchYearlyData}
-        >
-          再読み込み
-        </button>
-      </div>
-    );
+  // Error handling is removed based on user feedback and .clinerules
+  // Errors will be logged to the console by react-query default behavior
+
+  // Render calendar only if data is available
+  if (!yearlyLogAmounts) {
+     return (
+       <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
+         データがありません。
+       </div>
+     );
   }
+
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -209,66 +178,11 @@ const YearlyActivityCalendar = ({
           </button>
         </div>
       </div>
-      
-      {/* フィルター */}
-      <div className="mb-6">
-        <div className="flex items-center mb-2">
-          <Filter className="mr-2 h-4 w-4" />
-          <span className="font-medium">フィルター:</span>
-        </div>
-        
-        <div className="flex space-x-2 mb-3">
-          <button 
-            className={`px-3 py-1 rounded ${filterType === 'all' ? 'bg-primary text-white' : 'bg-gray-200'}`}
-            onClick={() => handleFilterTypeChange('all')}
-          >
-            全体
-          </button>
-          <button 
-            className={`px-3 py-1 rounded ${filterType === 'textbook' ? 'bg-primary text-white' : 'bg-gray-200'}`}
-            onClick={() => handleFilterTypeChange('textbook')}
-          >
-            参考書別
-          </button>
-          <button 
-            className={`px-3 py-1 rounded ${filterType === 'subject' ? 'bg-primary text-white' : 'bg-gray-200'}`}
-            onClick={() => handleFilterTypeChange('subject')}
-          >
-            科目別
-          </button>
-        </div>
-        
-        {filterType === 'textbook' && yearlyData && (
-          <select 
-            className="w-full p-2 border rounded"
-            value={selectedTextbookId || ''}
-            onChange={(e) => setSelectedTextbookId(e.target.value ? Number(e.target.value) : undefined)}
-          >
-            <option value="">参考書を選択</option>
-            {yearlyData.filters.textbooks.map(book => (
-              <option key={book.id} value={book.id}>
-                {book.title} ({book.subject})
-              </option>
-            ))}
-          </select>
-        )}
-        
-        {filterType === 'subject' && yearlyData && (
-          <select 
-            className="w-full p-2 border rounded"
-            value={selectedSubject || ''}
-            onChange={(e) => setSelectedSubject(e.target.value || undefined)}
-          >
-            <option value="">科目を選択</option>
-            {yearlyData.filters.subjects.map((subject, index) => (
-              <option key={index} value={subject}>{subject}</option>
-            ))}
-          </select>
-        )}
-      </div>
-      
+
+      {/* Filter UI removed */}
+
       {/* カレンダー表示 */}
-      <div className="relative">
+      <div className="relative mt-6"> {/* Added margin top */}
         {/* ホバー時の詳細情報 */}
         {hoveredDay && (
           <div className="absolute z-10 bg-gray-800 text-white p-2 rounded shadow-lg text-sm">
@@ -328,35 +242,9 @@ const YearlyActivityCalendar = ({
           <span>多い</span>
         </div>
       </div>
-      
-      {/* 統計情報 */}
-      {yearlyData && (
-        <div className="mt-6 pt-4 border-t">
-          <h3 className="text-lg font-semibold flex items-center mb-3">
-            <BarChart2 className="mr-2 h-5 w-5" />
-            統計情報
-          </h3>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gray-50 p-3 rounded">
-              <p className="text-sm text-gray-500">総学習量</p>
-              <p className="text-xl font-bold">{yearlyData.statistics.totalAmount}問</p>
-            </div>
-            <div className="bg-gray-50 p-3 rounded">
-              <p className="text-sm text-gray-500">学習日数</p>
-              <p className="text-xl font-bold">{yearlyData.statistics.studyDays}日</p>
-            </div>
-            <div className="bg-gray-50 p-3 rounded">
-              <p className="text-sm text-gray-500">1日平均</p>
-              <p className="text-xl font-bold">{yearlyData.statistics.avgPerDay}問</p>
-            </div>
-            <div className="bg-gray-50 p-3 rounded">
-              <p className="text-sm text-gray-500">最多日</p>
-              <p className="text-xl font-bold">{yearlyData.statistics.maxDay}問</p>
-            </div>
-          </div>
-        </div>
-      )}
+
+      {/* Statistics UI removed */}
+
     </div>
   );
 };

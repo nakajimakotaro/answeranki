@@ -9,7 +9,7 @@ export const trpc = createTRPCReact<AppRouter>();
 export const rawTrpcClient = createTRPCProxyClient<AppRouter>({
   links: [
     httpBatchLink({
-      url: 'http://localhost:3000/trpc',
+      url: '/trpc',
       // You can add headers here if needed, e.g., for authentication
       // async headers() {
       //   return {

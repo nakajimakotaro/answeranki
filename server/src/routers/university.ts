@@ -1,29 +1,27 @@
 import { z } from 'zod';
 import { router, publicProcedure } from '../trpc.js';
-import { getDbPool } from '../db/database.js'; // Changed to getDbPool
-import { NotFoundError, BadRequestError } from '../middleware/errorHandler.js';
-import { TRPCError } from '@trpc/server'; // Import TRPCError
+import prisma from '../db/prisma.js'; // Import Prisma Client
+import { TRPCError } from '@trpc/server';
+import { Prisma } from '@prisma/client'; // Import Prisma types for error handling
 
-// Zod スキーマ定義
+// Zod スキーマ定義 (Prismaの型と一致させる)
+// Prismaのモデルに基づいてスキーマを定義すると、型安全性が高まる
 const universitySchema = z.object({
-  id: z.number().optional(),
+  id: z.number(), // Prismaは通常number型のIDを返す
   name: z.string().min(1, { message: 'University name is required' }),
-  rank: z.number().optional().nullable(),
-  notes: z.string().optional().nullable(),
-  // created_at と updated_at はDBから取得するが、入力や共通型としては含めない
+  rank: z.number().nullable(), // nullを許容
+  notes: z.string().nullable(), // nullを許容
+  created_at: z.date(), // PrismaはDateオブジェクトを返す
+  updated_at: z.date(), // PrismaはDateオブジェクトを返す
 });
 
-// DBから取得する際の型（タイムスタンプを含む）
-// tRPCの出力型は自動推論されるため、明示的な型定義は必須ではないが、
-// DB操作の結果を扱う際に役立つことがある
-export interface UniversityDbRecord extends z.infer<typeof universitySchema> {
-  created_at?: string;
-  updated_at?: string;
-}
-
-const createUniversityInput = universitySchema.omit({ id: true }); // 作成時はID不要
-const updateUniversityInput = universitySchema.extend({ // 更新時はID必須
+// 入力スキーマ
+const createUniversityInput = universitySchema.omit({ id: true, created_at: true, updated_at: true }); // 作成時は自動生成フィールドを除外
+const updateUniversityInput = z.object({ // 更新時はIDと更新したいフィールドを指定
   id: z.number(),
+  name: z.string().min(1).optional(),
+  rank: z.number().nullable().optional(),
+  notes: z.string().nullable().optional(),
 });
 const deleteUniversityInput = z.object({
   id: z.number(),
@@ -35,20 +33,23 @@ export const universityRouter = router({
    */
   getAll: publicProcedure
     .query(async () => {
-      const pool = getDbPool(); // Changed to getDbPool
       try {
-        // Use pool.query for PostgreSQL
-        const result = await pool.query<UniversityDbRecord>('SELECT * FROM universities ORDER BY rank, name');
-        const universitiesData = result.rows;
-        // Zodスキーマでパースして、不要なフィールドを除去し、型を保証する
-        return z.array(universitySchema).parse(universitiesData);
+        const universities = await prisma.universities.findMany({
+          orderBy: [
+            { rank: 'asc' }, // rankで昇順 (nulls last by default in postgres)
+            { name: 'asc' }, // 次にnameで昇順
+          ],
+        });
+        // Prisma Clientが型付けされたデータを返す
+        // 必要に応じてZodでパースして返すことも可能だが、通常は不要
+        // return z.array(universitySchema).parse(universities);
+        return universities;
       } catch (error) {
-        console.error("Failed to parse universities data:", error);
-        // Use TRPCError for error handling
+        console.error('Failed to retrieve universities:', error);
         throw new TRPCError({
-            code: 'INTERNAL_SERVER_ERROR',
-            message: 'Failed to retrieve universities due to data validation error.',
-            cause: error,
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to retrieve universities.',
+          cause: error,
         });
       }
     }),
@@ -60,57 +61,70 @@ export const universityRouter = router({
     .input(createUniversityInput)
     .mutation(async ({ input }) => {
       const { name, rank, notes } = input;
-      const pool = getDbPool(); // Changed to getDbPool
       try {
-        // Use pool.query and RETURNING *
-        const result = await pool.query(
-          'INSERT INTO universities (name, rank, notes) VALUES ($1, $2, $3) RETURNING *',
-          [name, rank ?? null, notes ?? null] // Handle potential nulls
-        );
-        const newUniversity = result.rows[0];
-        if (!newUniversity) {
-          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to retrieve newly created university' });
-        }
-        // 作成時もスキーマでパースして返す
-        return universitySchema.parse(newUniversity);
+        const newUniversity = await prisma.universities.create({
+          data: {
+            name,
+            rank: rank, // Prismaはundefinedを無視するので、nullチェックは不要な場合が多い
+            notes: notes,
+          },
+        });
+        return universitySchema.parse(newUniversity); // 返却前にスキーマでパース
       } catch (error: any) {
-          console.error("Error creating university:", error);
-          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message || 'Failed to create university' });
+        console.error('Error creating university:', error);
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === 'P2002') { // Unique constraint violation
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: `University with name "${name}" might already exist.`, // より具体的なメッセージ
+            });
+          }
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create university',
+          cause: error,
+        });
       }
     }),
+
   /**
    * 大学を更新
    */
   update: publicProcedure
     .input(updateUniversityInput)
     .mutation(async ({ input }) => {
-      const { id, name, rank, notes } = input;
-      const pool = getDbPool(); // Changed to getDbPool
+      const { id, ...updateData } = input; // IDと更新データを分離
       try {
-          // Check if university exists
-          const existingResult = await pool.query('SELECT id FROM universities WHERE id = $1', [id]);
-          if (existingResult.rowCount === 0) {
-            throw new NotFoundError('University not found'); // Use custom error
-          }
-
-          // Use pool.query and RETURNING *
-          const result = await pool.query(
-            'UPDATE universities SET name = $1, rank = $2, notes = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING *',
-            [name, rank ?? null, notes ?? null, id] // Handle potential nulls
-          );
-          const updatedUniversity = result.rows[0];
-           if (!updatedUniversity) {
-            // This case should ideally not happen if update succeeded
-            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to retrieve updated university' });
-          }
-          // 更新時もスキーマでパースして返す
-          return universitySchema.parse(updatedUniversity);
+        const updatedUniversity = await prisma.universities.update({
+          where: { id: id },
+          data: updateData, // name, rank, notes が含まれるオブジェクト
+        });
+        return universitySchema.parse(updatedUniversity); // 返却前にスキーマでパース
       } catch (error: any) {
-          console.error(`Error updating university ${id}:`, error);
-          if (error instanceof NotFoundError) throw error; // Re-throw known errors
-          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message || 'Failed to update university' });
+        console.error(`Error updating university ${id}:`, error);
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === 'P2025') { // Record to update not found
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: `University with ID ${id} not found.`,
+            });
+          }
+          if (error.code === 'P2002') { // Unique constraint violation during update
+             throw new TRPCError({
+              code: 'CONFLICT',
+              message: `Cannot update university: name "${updateData.name}" might already exist for another university.`,
+            });
+          }
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update university',
+          cause: error,
+        });
       }
     }),
+
   /**
    * 大学を削除
    */
@@ -118,13 +132,36 @@ export const universityRouter = router({
     .input(deleteUniversityInput)
     .mutation(async ({ input }) => {
       const { id } = input;
-      const pool = getDbPool(); // Changed to getDbPool
-      // Use pool.query for DELETE
-      const result = await pool.query('DELETE FROM universities WHERE id = $1', [id]);
-      if (result.rowCount === 0) { // Check rowCount
-        throw new NotFoundError('University not found'); // Use custom error
+      try {
+        await prisma.universities.delete({
+          where: { id: id },
+        });
+        // 成功時はステータスコード 204 No Content が返るのが一般的だが、
+        // tRPCではメッセージを返すこともできる
+        return { success: true, message: 'University deleted successfully' };
+      } catch (error: any) {
+        console.error(`Error deleting university ${id}:`, error);
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === 'P2025') { // Record to delete not found
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: `University with ID ${id} not found.`,
+            });
+          }
+           // P2003: Foreign key constraint failed (e.g., exams referencing this university)
+          if (error.code === 'P2003') {
+             throw new TRPCError({
+              code: 'CONFLICT',
+              message: `Cannot delete university with ID ${id} because it is referenced by other records (e.g., exams).`,
+            });
+          }
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to delete university',
+          cause: error,
+        });
       }
-      return { message: 'University deleted successfully' };
     }),
 });
 

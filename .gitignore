@@ -29,3 +29,6 @@ test.jpeg
 
 # Environment variables
 .env
+
+# TypeScript build info
+tsconfig.tsbuildinfo

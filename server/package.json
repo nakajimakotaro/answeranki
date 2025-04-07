@@ -12,12 +12,11 @@
   },
   "dependencies": {
     "@answeranki/shared": "workspace:^",
+    "@prisma/client": "^6.5.0",
     "@trpc/server": "^11.0.2",
-    "@types/pg": "^8.11.11",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "nanoid": "^5.1.5",
-    "pg": "^8.14.1",
     "sharp": "^0.33.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7"
@@ -28,6 +27,7 @@
     "@types/node": "^20.11.5",
     "@types/sqlite3": "^3.1.11",
     "nodemon": "^3.0.3",
+    "prisma": "^6.5.0",
     "typescript": "^5.8.2"
   }
 }

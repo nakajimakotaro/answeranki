@@ -6,7 +6,7 @@ import {
   format,
   compareAsc,
 } from 'date-fns';
-// import { scheduleService, Textbook as OldTextbookType, StudySchedule } from '../services/scheduleService'; // Removed old service
+// Removed old scheduleService import comment
 import ankiConnectService from '../services/ankiConnectService.js';
 import { BookOpen, Plus, Edit, Trash, Link as LinkIcon, Calendar } from 'lucide-react';
 import { trpc } from '../lib/trpc.js'; // Import tRPC client
@@ -146,19 +146,11 @@ const TextbooksPage = () => {
     const fetchSchedules = async () => {
        try {
          setScheduleLoading(true);
-         // Placeholder: Replace with actual tRPC call or keep old service temporarily
-         // const schedulesData = await trpc.schedule.getSchedules.query();
+         // Placeholder: Schedule fetching logic needs to be implemented using tRPC hooks/queries.
+         // const schedulesData = await trpc.schedule.getSchedules.query(); // Example tRPC call
          // setSchedules(schedulesData);
 
-         // Temporary: Keep old fetch logic for schedules using scheduleService
-         // Need to re-import scheduleService temporarily if using this path
-         // import { scheduleService } from '../services/scheduleService';
-         // const events = await scheduleService.getTimelineEvents();
-         // const schedulesData = events
-         //   .filter(event => event.type === 'schedule')
-         //   .map(event => event.details as StudySchedule);
-         // setSchedules(schedulesData);
-         console.warn("Schedule fetching needs update to tRPC");
+         // Removed old scheduleService related comments and warnings.
          // Simulate fetching schedules for now
          await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
          setSchedules([]); // Set to empty array as placeholder
@@ -292,14 +284,12 @@ const TextbooksPage = () => {
         total_problems: scheduleTotalProblems
       };
 
-      // TODO: Replace with tRPC mutations for schedules
+      // TODO: Replace with tRPC mutations for schedules once implemented
       if (editingSchedule && editingSchedule.id) {
-        // await updateScheduleMutation.mutateAsync({ id: editingSchedule.id, ...scheduleData });
-        console.warn("Schedule update needs update to tRPC");
+        // await updateScheduleMutation.mutateAsync({ id: editingSchedule.id, ...scheduleData }); // Example tRPC call
         alert("Schedule update not implemented with tRPC yet."); // Placeholder alert
       } else {
-        // await createScheduleMutation.mutateAsync(scheduleData);
-         console.warn("Schedule creation needs update to tRPC");
+        // await createScheduleMutation.mutateAsync(scheduleData); // Example tRPC call
          alert("Schedule creation not implemented with tRPC yet."); // Placeholder alert
       }
 

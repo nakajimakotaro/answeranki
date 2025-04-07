@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { addDays, format, parseISO, differenceInDays, getDay, isWithinInterval } from 'date-fns'; // subDays, startOfWeek, endOfWeek を削除
-import { scheduleService, TimelineEvent } from '../services/scheduleService.js';
+import { addDays, format, parseISO, differenceInDays, getDay, isWithinInterval, isValid } from 'date-fns'; // Added isValid
+// Removed scheduleService import
+import type { TimelineEvent as SharedTimelineEvent } from '@shared/types/timeline'; // Import shared type
 import { getDailyDateRange, getYearlyDateRange } from '../config/scheduleConfig.js'; // 設定ファイルをインポート
 
 // 表示モードの型定義
 type ViewMode = 'daily' | 'biWeekly';
+
+// TimelineEvent with Date objects, matching the structure used in SchedulesPage
+interface TimelineEventWithDate extends Omit<SharedTimelineEvent, 'startDate' | 'endDate'> {
+  startDate: Date;
+  endDate?: Date;
+}
+
 
 // コンポーネントのProps型定義
 interface StudyGanttChartProps {
   containerWidth: number;
   containerHeight?: number;
   className?: string;
-  events?: TimelineEvent[];
+  events: TimelineEventWithDate[]; // Events are now required and use the Date object type
   viewType?: 'daily' | 'yearly';
 }
 
@@ -20,15 +28,14 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
   containerWidth,
   containerHeight = 400,
   className = '',
-  events: externalEvents,
+  events, // Directly use the events prop
   viewType,
 }) => {
   // 状態管理
-  const [events, setEvents] = useState<TimelineEvent[]>(externalEvents || []);
+  // const [events, setEvents] = useState<TimelineEvent[]>(externalEvents || []); // Removed internal events state
   const [viewMode, setViewMode] = useState<ViewMode>(viewType === 'yearly' ? 'biWeekly' : 'daily');
-  const [loading, setLoading] = useState<boolean>(!externalEvents);
-  const [error, setError] = useState<string | null>(null);
-  
+  // Removed loading and error states, handled by parent
+
   // 日付範囲の計算
   const today = new Date(); // today は todayMarker で使用するため残す
 
@@ -48,32 +55,7 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
     }
   }, [viewType]);
 
-  // データ取得
-  useEffect(() => {
-    // 外部からイベントが提供されている場合はそれを使用
-    if (externalEvents) {
-      setEvents(externalEvents);
-      setLoading(false);
-      return;
-    }
-
-    const fetchEvents = async () => {
-      try {
-        setLoading(true);
-        const { startDate, endDate } = getDateRange();
-        const timelineEvents = await scheduleService.getTimelineEvents(startDate, endDate);
-        setEvents(timelineEvents);
-        setError(null);
-      } catch (err) {
-        console.error('Failed to fetch timeline events:', err);
-        setError('イベントの取得に失敗しました');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEvents();
-  }, [viewMode, externalEvents]); // 表示モードが変わったら再取得
+  // Removed data fetching useEffect and fetchEvents function
 
   // SVG描画のための計算
   const calculateChartDimensions = () => {
@@ -196,16 +178,20 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
     // dayWidth をここで取得
     const { eventHeight, eventMargin, headerHeight, dayWidth } = calculateChartDimensions();
 
-    return events.map((event, index) => {
+    // Filter out events with invalid dates before mapping
+    const validEvents = events.filter(event =>
+        isValid(event.startDate) && (!event.endDate || isValid(event.endDate))
+    );
+
+    return validEvents.map((event, index) => {
+      // Ensure dates are valid before calculating positions
       const startX = dateToX(event.startDate);
-      // 終了日の翌日のX座標を計算して幅を正確にする
-      // date-fns の addDays をインポートに追加する必要がある
       const endX = event.endDate
         ? dateToX(addDays(event.endDate, 1)) // 終了日の翌日
         : dateToX(addDays(event.startDate, 1)); // 単一日イベントも1日分の幅を持たせる
 
       const y = headerHeight + (index * (eventHeight + eventMargin));
-      // 幅の計算は startX と endX の差分でOK、最小幅を1日分にする
+      // Ensure width calculation is valid
       const width = Math.max(endX - startX, dayWidth);
       const eventColor = '#E5E7EB'; // イベントバーの色を統一 (明るいグレー)
       const textColor = '#374151'; // テキストの色を統一 (濃いグレー)
@@ -433,26 +419,14 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
           </button>
         </div>
       )}
-      
-      {/* ローディング状態 */}
-      {loading && (
-        <div className="flex justify-center items-center h-40">
-          <p className="text-gray-500">読み込み中...</p>
-        </div>
-      )}
-      
-      {/* エラー表示 */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          <p>{error}</p>
-        </div>
-      )}
-      
+
+      {/* Removed loading and error display sections */}
+
       {/* ガントチャート */}
-      {!loading && !error && events.length > 0 && renderChart()}
-      
-      {/* データがない場合 */}
-      {!loading && !error && events.length === 0 && (
+      {/* Render based on events prop length */}
+      {events.length > 0 ? (
+         renderChart()
+      ) : (
         <div className="flex justify-center items-center h-40 bg-gray-50 rounded">
           <p className="text-gray-500">表示するイベントがありません</p>
         </div>
