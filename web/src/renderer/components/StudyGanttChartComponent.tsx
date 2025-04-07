@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { addDays, format, parseISO, differenceInDays, getDay, isWithinInterval, isValid } from 'date-fns'; // Added isValid
-// Removed scheduleService import
-import type { TimelineEvent as SharedTimelineEvent } from '@shared/types/timeline'; // Import shared type
-import { getDailyDateRange, getYearlyDateRange } from '../config/scheduleConfig.js'; // 設定ファイルをインポート
+import { addDays, format, parseISO, differenceInDays, getDay, isWithinIntervali } from 'date-fns';
+import type { TimelineEvent as SharedTimelineEvent } from '@shared/types/timeline';
+import { getDailyDateRange, getYearlyDateRange } from '../config/scheduleConfig.js';
 
 // 表示モードの型定義
 type ViewMode = 'daily' | 'biWeekly';
@@ -19,7 +18,7 @@ interface StudyGanttChartProps {
   containerWidth: number;
   containerHeight?: number;
   className?: string;
-  events: TimelineEventWithDate[]; // Events are now required and use the Date object type
+  events: TimelineEventWithDate[];
   viewType?: 'daily' | 'yearly';
 }
 
@@ -28,13 +27,11 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
   containerWidth,
   containerHeight = 400,
   className = '',
-  events, // Directly use the events prop
+  events,
   viewType,
 }) => {
   // 状態管理
-  // const [events, setEvents] = useState<TimelineEvent[]>(externalEvents || []); // Removed internal events state
   const [viewMode, setViewMode] = useState<ViewMode>(viewType === 'yearly' ? 'biWeekly' : 'daily');
-  // Removed loading and error states, handled by parent
 
   // 日付範囲の計算
   const today = new Date(); // today は todayMarker で使用するため残す
@@ -54,8 +51,6 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
       setViewMode(viewType === 'yearly' ? 'biWeekly' : 'daily');
     }
   }, [viewType]);
-
-  // Removed data fetching useEffect and fetchEvents function
 
   // SVG描画のための計算
   const calculateChartDimensions = () => {
@@ -178,12 +173,7 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
     // dayWidth をここで取得
     const { eventHeight, eventMargin, headerHeight, dayWidth } = calculateChartDimensions();
 
-    // Filter out events with invalid dates before mapping
-    const validEvents = events.filter(event =>
-        isValid(event.startDate) && (!event.endDate || isValid(event.endDate))
-    );
-
-    return validEvents.map((event, index) => {
+    return events.map((event, index) => {
       // Ensure dates are valid before calculating positions
       const startX = dateToX(event.startDate);
       const endX = event.endDate

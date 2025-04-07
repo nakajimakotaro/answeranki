@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AlertCircle, Save, Trash, Plus } from 'lucide-react';
-import { trpc } from '../lib/trpc.js'; // Import tRPC client
+import { trpc } from '../lib/trpc.js';
 type AppRouter = any;
 import { inferRouterOutputs } from '@trpc/server';
 
@@ -27,160 +27,121 @@ interface ExamSubjectScoresProps {
  * 試験の科目別点数を表示・編集するコンポーネント
  */
 const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
-  // tRPC hooks
   const utils = trpc.useUtils();
-  // Query for the specific exam to get its format type
-  const examQuery = trpc.exam.getById.useQuery({ id: examId }, { // Changed getExamById to getById
-    enabled: !!examId, // Only run query if examId is valid
-    staleTime: Infinity, // Exam details rarely change, cache indefinitely
+  const examQuery = trpc.exam.getById.useQuery({ id: examId }, {
+    enabled: !!examId,
+    staleTime: Infinity,
   });
-  // Query for subject scores
-  const subjectScoresQuery = trpc.exam.getSubjectScoresByExamId.useQuery({ examId }, { // Changed getSubjectScores to getSubjectScoresByExamId
-    enabled: !!examId, // Only run query if examId is valid
+  const subjectScoresQuery = trpc.exam.getSubjectScoresByExamId.useQuery({ examId }, {
+    enabled: !!examId,
   });
-  // Mutation for saving scores
   const saveScoresMutation = trpc.exam.batchUpsertSubjectScores.useMutation({
     onSuccess: () => {
-      utils.exam.getSubjectScoresByExamId.invalidate({ examId }); // Changed getSubjectScores to getSubjectScoresByExamId
+      utils.exam.getSubjectScoresByExamId.invalidate({ examId });
       setEditMode(false);
-      setError(null); // Clear errors
-      },
-      onError: (err) => {
-        setError(new Error(err.message)); // Extract message and create a new Error object
       },
     });
-  // Mutation for deleting a score
   const deleteScoreMutation = trpc.exam.deleteSubjectScore.useMutation({
      onSuccess: () => {
-      utils.exam.getSubjectScoresByExamId.invalidate({ examId }); // Changed getSubjectScores to getSubjectScoresByExamId
-      setError(null); // Clear errors
+      utils.exam.getSubjectScoresByExamId.invalidate({ examId });
       },
-       onError: (err) => {
-        setError(new Error(err.message)); // Extract message and create a new Error object
-       },
      });
 
-  // Local state
-  const [error, setError] = useState<Error | null>(null); // For mutation errors
-  const [examFormatType, setExamFormatType] = useState<string>('descriptive'); // Default or derived from examQuery
+  const [examFormatType, setExamFormatType] = useState<string>('descriptive');
+  const [editMode, setEditMode] = useState(false);
+  const [scoresByExamType, setScoresByExamType] = useState<Record<SubjectExamType, Record<string, { score: string, maxScore: string }>>>({
+    '共テ': {},
+    '二次試験': {},
+  });
 
-  // Update examFormatType when examQuery data is available
   useEffect(() => {
     if (examQuery.data) {
       setExamFormatType(examQuery.data.exam_type);
     }
   }, [examQuery.data]);
 
-   // Editing state
-  const [editMode, setEditMode] = useState(false);
-  const [commonTestScores, setCommonTestScores] = useState<Record<string, { score: string, maxScore: string }>>({});
-  const [secondaryTestScores, setSecondaryTestScores] = useState<Record<string, { score: string, maxScore: string }>>({});
-
-  // Update local edit state when scores data from query changes
   useEffect(() => {
-    if (!subjectScoresQuery.data) return; // Don't run if data is not available
+    if (!subjectScoresQuery.data) return;
 
-    const commonTest: Record<string, { score: string, maxScore: string }> = {};
-    const secondaryTest: Record<string, { score: string, maxScore: string }> = {};
+    const initialScores: Record<SubjectExamType, Record<string, { score: string, maxScore: string }>> = {
+      '共テ': {},
+      '二次試験': {},
+    };
 
-    // Initialize commonTest with default max scores
     COMMON_TEST_SUBJECTS.forEach(subject => {
       const defaultMaxScore = COMMON_TEST_MAX_SCORES[subject] !== undefined ? String(COMMON_TEST_MAX_SCORES[subject]) : '';
-      commonTest[subject] = { score: '', maxScore: defaultMaxScore };
+      initialScores['共テ'][subject] = { score: '', maxScore: defaultMaxScore };
     });
-    // Initialize secondaryTest (no default max scores defined for these)
     SECONDARY_TEST_SUBJECTS.forEach(subject => {
-      secondaryTest[subject] = { score: '', maxScore: '' };
+      initialScores['二次試験'][subject] = { score: '', maxScore: '' };
     });
 
-    // Use data from the tRPC query
     subjectScoresQuery.data.forEach((score) => {
       const scoreVal = score.score !== null && score.score !== undefined ? String(score.score) : '';
-      // Use existing maxScore if available, otherwise keep the default
-      const maxScoreVal = score.max_score !== null && score.max_score !== undefined
-        ? String(score.max_score)
-        // Use default common test max score if subject exists there, otherwise empty string
-        : COMMON_TEST_MAX_SCORES[score.subject] !== undefined ? String(COMMON_TEST_MAX_SCORES[score.subject]) : '';
+      const maxScoreVal = score.max_score !== null && score.max_score !== undefined ? String(score.max_score) : '';
 
-      if (score.exam_type === '共テ' && commonTest[score.subject]) {
-        commonTest[score.subject] = { score: scoreVal, maxScore: maxScoreVal };
-      } else if (score.exam_type === '二次試験' && secondaryTest[score.subject]) {
-        // For secondary, maxScoreVal will be empty string if not set, which is fine
-        const secondaryMaxScoreVal = score.max_score !== null && score.max_score !== undefined ? String(score.max_score) : '';
-        secondaryTest[score.subject] = { score: scoreVal, maxScore: secondaryMaxScoreVal };
+      if (score.exam_type === '共テ' && initialScores['共テ'][score.subject]) {
+        const finalMaxScore = maxScoreVal || initialScores['共テ'][score.subject].maxScore;
+        initialScores['共テ'][score.subject] = { score: scoreVal, maxScore: finalMaxScore };
+      } else if (score.exam_type === '二次試験' && initialScores['二次試験'][score.subject]) {
+        initialScores['二次試験'][score.subject] = { score: scoreVal, maxScore: maxScoreVal };
       }
     });
 
-    setCommonTestScores(commonTest);
-    setSecondaryTestScores(secondaryTest);
-  }, [subjectScoresQuery.data]); // Depend on the query data
+    setScoresByExamType(initialScores);
+  }, [subjectScoresQuery.data]);
 
-  // Save scores using tRPC mutation
   const handleSaveScores = () => {
-    setError(null); // Clear previous errors
     const scoresToSave: { exam_type: SubjectExamType; subject: string; score?: number; max_score?: number }[] = [];
 
-    for (const subject of COMMON_TEST_SUBJECTS) {
-      const data = commonTestScores[subject];
-      // Only include if score or maxScore is entered and valid
-      const scoreNum = data?.score ? parseFloat(data.score) : undefined;
-      const maxScoreNum = data?.maxScore ? parseFloat(data.maxScore) : undefined;
-       if (data && (!isNaN(scoreNum ?? NaN) || !isNaN(maxScoreNum ?? NaN))) {
-         scoresToSave.push({
-           exam_type: '共テ',
-           subject,
-           score: !isNaN(scoreNum ?? NaN) ? scoreNum : undefined,
-           max_score: !isNaN(maxScoreNum ?? NaN) ? maxScoreNum : undefined,
-         });
-       }
-    }
+    (Object.keys(scoresByExamType) as SubjectExamType[]).forEach(examType => {
+      const subjects = examType === '共テ' ? COMMON_TEST_SUBJECTS : SECONDARY_TEST_SUBJECTS;
+      subjects.forEach(subject => {
+        const data = scoresByExamType[examType]?.[subject];
+        if (!data) return;
 
-    for (const subject of SECONDARY_TEST_SUBJECTS) {
-      const data = secondaryTestScores[subject];
-       const scoreNum = data?.score ? parseFloat(data.score) : undefined;
-       const maxScoreNum = data?.maxScore ? parseFloat(data.maxScore) : undefined;
-       if (data && (!isNaN(scoreNum ?? NaN) || !isNaN(maxScoreNum ?? NaN))) {
-         scoresToSave.push({
-           exam_type: '二次試験',
-           subject,
-           score: !isNaN(scoreNum ?? NaN) ? scoreNum : undefined,
-           max_score: !isNaN(maxScoreNum ?? NaN) ? maxScoreNum : undefined,
-         });
-       }
-    }
+        const scoreNum = data.score ? parseFloat(data.score) : undefined;
+        const maxScoreNum = data.maxScore ? parseFloat(data.maxScore) : undefined;
+
+        if (!isNaN(scoreNum ?? NaN) || !isNaN(maxScoreNum ?? NaN)) {
+          scoresToSave.push({
+            exam_type: examType,
+            subject,
+            score: !isNaN(scoreNum ?? NaN) ? scoreNum : undefined,
+            max_score: !isNaN(maxScoreNum ?? NaN) ? maxScoreNum : undefined,
+          });
+        }
+      });
+    });
+
 
     if (scoresToSave.length > 0) {
       saveScoresMutation.mutate({ examId, scores: scoresToSave });
     } else {
-      setEditMode(false); // Exit edit mode if nothing to save
+      setEditMode(false);
     }
-    // onSuccess/onError handlers in mutation handle UI updates
   };
 
-  // Delete score using tRPC mutation
   const handleDeleteScore = (scoreId: number) => {
     if (window.confirm('この点数を削除してもよろしいですか？')) {
-        setError(null); // Clear previous errors
         deleteScoreMutation.mutate({ scoreId });
     }
-    // onSuccess/onError handlers in mutation handle UI updates
   };
 
-  // Handle input changes
-   const handleCommonTestScoreChange = (subject: string, field: 'score' | 'maxScore', value: string) => {
-    setCommonTestScores(prev => ({
+  const handleScoreChange = (examType: SubjectExamType, subject: string, field: 'score' | 'maxScore', value: string) => {
+    setScoresByExamType(prev => ({
       ...prev,
-      [subject]: { ...prev[subject], [field]: value }
-    }));
-  };
-  const handleSecondaryTestScoreChange = (subject: string, field: 'score' | 'maxScore', value: string) => {
-    setSecondaryTestScores(prev => ({
-      ...prev,
-      [subject]: { ...prev[subject], [field]: value }
+      [examType]: {
+        ...prev[examType],
+        [subject]: {
+          ...(prev[examType]?.[subject] || { score: '', maxScore: '' }),
+          [field]: value
+        }
+      }
     }));
   };
 
-  // Calculate total score locally based on query data
+
   const calculateTotalScore = (scores: SubjectScore[] | undefined) => {
     if (!scores) return { totalScore: 0, totalMaxScore: 0 };
     let totalScore = 0;
@@ -193,20 +154,23 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
   };
   const { totalScore, totalMaxScore } = calculateTotalScore(subjectScoresQuery.data);
 
-  // Render Common Test Scores
-  const renderCommonTestScores = () => {
-    // Show based on the exam's format type derived from examQuery
-    if (examFormatType !== 'multiple_choice' && examFormatType !== 'combined') return null;
+  const renderScoresTable = (
+    examType: SubjectExamType,
+    title: string,
+    subjects: string[],
+    displayCondition: boolean
+  ) => {
+    if (!displayCondition) return null;
 
-    const scores = subjectScoresQuery.data?.filter((score) => score.exam_type === '共テ') || [];
+    const scores = subjectScoresQuery.data?.filter((score) => score.exam_type === examType) || [];
+    const currentEditScores = scoresByExamType[examType] || {};
 
     if (editMode) {
       return (
         <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-2">共通テスト</h3>
+          <h3 className="text-lg font-semibold mb-2">{title}</h3>
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white border">
-              {/* Table Head */}
               <thead>
                 <tr className="bg-gray-100">
                   <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">科目</th>
@@ -214,17 +178,16 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
                   <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">満点</th>
                 </tr>
               </thead>
-              {/* Table Body */}
               <tbody className="divide-y divide-gray-200">
-                {COMMON_TEST_SUBJECTS.map(subject => (
-                  <tr key={`common-${subject}`}>
+                {subjects.map(subject => (
+                  <tr key={`${examType}-${subject}`}>
                     <td className="py-2 px-3 whitespace-nowrap">{subject.replace('_', '/')}</td>
                     <td className="py-2 px-3 whitespace-nowrap">
                       <input
                         type="number"
                         className="w-20 p-1 border border-gray-300 rounded-md"
-                        value={commonTestScores[subject]?.score || ''}
-                        onChange={(e) => handleCommonTestScoreChange(subject, 'score', e.target.value)}
+                        value={currentEditScores[subject]?.score || ''}
+                        onChange={(e) => handleScoreChange(examType, subject, 'score', e.target.value)}
                         placeholder="得点" step="0.1"
                       />
                     </td>
@@ -232,8 +195,8 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
                       <input
                         type="number"
                         className="w-20 p-1 border border-gray-300 rounded-md"
-                        value={commonTestScores[subject]?.maxScore || ''}
-                        onChange={(e) => handleCommonTestScoreChange(subject, 'maxScore', e.target.value)}
+                        value={currentEditScores[subject]?.maxScore || ''}
+                        onChange={(e) => handleScoreChange(examType, subject, 'maxScore', e.target.value)}
                         placeholder="満点" step="0.1"
                       />
                     </td>
@@ -245,25 +208,25 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
         </div>
       );
     }
-    // Display mode
+
     if (!subjectScoresQuery.isLoading && scores.length === 0) {
-       return (
+      return (
         <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-2">共通テスト</h3>
+          <h3 className="text-lg font-semibold mb-2">{title}</h3>
           <div className="text-center py-4 text-gray-500 bg-gray-50 rounded border">
-            <p>共通テストの点数データはありません</p>
+            <p>{title}の点数データはありません</p>
             <p className="text-xs mt-1">「編集」ボタンから登録できます</p>
           </div>
         </div>
       );
     }
+
     return (
-       <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2">共通テスト</h3>
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-2">{title}</h3>
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white border">
-            {/* Table Head */}
-             <thead>
+            <thead>
               <tr className="bg-gray-100">
                 <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">科目</th>
                 <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">得点</th>
@@ -271,7 +234,6 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
                 <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
-            {/* Table Body */}
             <tbody className="divide-y divide-gray-200">
               {scores.map((score) => (
                 <tr key={score.id}>
@@ -292,106 +254,7 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
     );
   };
 
-  // Render Secondary Test Scores
-  const renderSecondaryTestScores = () => {
-    // Show based on the exam's format type derived from examQuery
-    if (examFormatType !== 'descriptive' && examFormatType !== 'combined') return null;
 
-    const scores = subjectScoresQuery.data?.filter((score) => score.exam_type === '二次試験') || [];
-
-     if (editMode) {
-      return (
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-2">二次試験</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border">
-               {/* Table Head */}
-               <thead>
-                <tr className="bg-gray-100">
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">科目</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">得点</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">満点</th>
-                </tr>
-              </thead>
-              {/* Table Body */}
-              <tbody className="divide-y divide-gray-200">
-                {SECONDARY_TEST_SUBJECTS.map(subject => (
-                  <tr key={`secondary-${subject}`}>
-                    <td className="py-2 px-3 whitespace-nowrap">{subject}</td>
-                    <td className="py-2 px-3 whitespace-nowrap">
-                      <input
-                        type="number"
-                        className="w-20 p-1 border border-gray-300 rounded-md"
-                        value={secondaryTestScores[subject]?.score || ''}
-                        onChange={(e) => handleSecondaryTestScoreChange(subject, 'score', e.target.value)}
-                        placeholder="得点" step="0.1"
-                      />
-                    </td>
-                    <td className="py-2 px-3 whitespace-nowrap">
-                      <input
-                        type="number"
-                        className="w-20 p-1 border border-gray-300 rounded-md"
-                        value={secondaryTestScores[subject]?.maxScore || ''}
-                        onChange={(e) => handleSecondaryTestScoreChange(subject, 'maxScore', e.target.value)}
-                        placeholder="満点" step="0.1"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
-    }
-    // Display mode
-     if (!subjectScoresQuery.isLoading && scores.length === 0) {
-       return (
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-2">二次試験</h3>
-          <div className="text-center py-4 text-gray-500 bg-gray-50 rounded border">
-            <p>二次試験の点数データはありません</p>
-            <p className="text-xs mt-1">「編集」ボタンから登録できます</p>
-          </div>
-        </div>
-      );
-    }
-    return (
-       <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2">二次試験</h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border">
-             {/* Table Head */}
-             <thead>
-              <tr className="bg-gray-100">
-                <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">科目</th>
-                <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">得点</th>
-                <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">満点</th>
-                <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-              </tr>
-            </thead>
-            {/* Table Body */}
-            <tbody className="divide-y divide-gray-200">
-              {scores.map((score) => (
-                <tr key={score.id}>
-                  <td className="py-2 px-3 whitespace-nowrap">{score.subject}</td>
-                  <td className="py-2 px-3 whitespace-nowrap">{score.score ?? '-'}</td>
-                  <td className="py-2 px-3 whitespace-nowrap">{score.max_score ?? '-'}</td>
-                  <td className="py-2 px-3 whitespace-nowrap">
-                    <button onClick={() => handleDeleteScore(score.id)} className="text-red-500 hover:text-red-700" title="削除" disabled={deleteScoreMutation.isPending}>
-                      <Trash className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  // Render Total Score
   const renderTotalScore = () => {
     if (!subjectScoresQuery.data || subjectScoresQuery.data.length === 0) return null;
 
@@ -412,23 +275,6 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
     );
   };
 
-  // Render Error
-  const renderError = () => {
-    // Combine query and mutation errors
-    const errorToShow = subjectScoresQuery.error?.message || error?.message || null;
-    if (!errorToShow) return null;
-    return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 flex items-start">
-        <AlertCircle className="w-5 h-5 mr-2 mt-0.5" />
-        <div>
-          <p className="font-semibold">エラーが発生しました</p>
-          <p>{errorToShow}</p>
-        </div>
-      </div>
-    );
-  };
-
-  // Main component render
   return (
     <div className="mt-4">
       <div className="flex justify-between items-center mb-4">
@@ -451,9 +297,7 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
         )}
       </div>
 
-      {renderError()} {/* Display query or mutation errors */}
-
-      {subjectScoresQuery.isLoading && !editMode ? ( // Use query loading state for display mode
+      {subjectScoresQuery.isLoading && !editMode ? (
         <div className="text-center py-8 text-gray-500">
           <span className="loading loading-spinner loading-lg"></span>
           <p>点数データを読み込み中...</p>
@@ -461,8 +305,18 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
       ) : (
         <>
           {renderTotalScore()}
-          {renderCommonTestScores()}
-          {renderSecondaryTestScores()}
+          {renderScoresTable(
+            '共テ',
+            '共通テスト',
+            COMMON_TEST_SUBJECTS,
+            examFormatType === 'multiple_choice' || examFormatType === 'combined'
+          )}
+          {renderScoresTable(
+            '二次試験',
+            '二次試験',
+            SECONDARY_TEST_SUBJECTS,
+            examFormatType === 'descriptive' || examFormatType === 'combined'
+          )}
         </>
       )}
     </div>

@@ -10,17 +10,6 @@ export type UniversityExamType =
   | '模試' // 模試も受験日として管理する場合があるため含める
   | 'その他';
 
-// 他のスケジュール関連の型定義もここに集約できます
-// 例:
-// export interface University { ... }
-// export interface Textbook { ... }
-// export interface StudySchedule { ... }
-// export interface ExamDate { ... } // ここで UniversityExamType を使う
-// export interface StudyLog { ... }
-// export interface Progress { ... }
-// export interface YearlyLogData { ... }
-// export interface ApiError { ... }
-
 /**
  * ガントチャートやタイムラインで表示するための汎用的なイベント型
  */

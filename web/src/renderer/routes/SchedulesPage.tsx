@@ -13,10 +13,10 @@ import { trpc } from '../lib/trpc';
 import type { StudySchedule } from '@shared/schemas/schedule';
 import type { TimelineEvent as SharedTimelineEvent } from '@shared/types/timeline';
 import { BookOpen } from 'lucide-react';
-import YearlyActivityCalendar from '../components/YearlyActivityCalendar'; // Removed .js
-import ScheduleProgressChart from '../components/ScheduleProgressChart'; // Removed .js
-import TextbookStackedProgress from '../components/TextbookStackedProgress'; // Removed .js
-import StudyGanttChart from '../components/StudyGanttChartComponent'; // Removed .js
+import YearlyActivityCalendar from '../components/YearlyActivityCalendar';
+import ScheduleProgressChart from '../components/ScheduleProgressChart';
+import TextbookStackedProgress from '../components/TextbookStackedProgress';
+import StudyGanttChart from '../components/StudyGanttChartComponent';
 
 // tRPC の TimelineEvent 型 (Date オブジェクトを含む)
 interface TimelineEventWithDate extends Omit<SharedTimelineEvent, 'startDate' | 'endDate' | 'details'> {
@@ -37,69 +37,58 @@ const SchedulesPage = () => {
   // 取得したデータを Date オブジェクトに変換
   const timelineEvents = useMemo((): TimelineEventWithDate[] => {
     if (!rawEvents) return [];
-    try {
-      return rawEvents.map((event) => {
-        const startDate = new Date(event.startDate); // 文字列からDateへ
-        const endDate = event.endDate ? new Date(event.endDate) : undefined; // 文字列からDateへ
+    return rawEvents.map((event) => {
+      const startDate = new Date(event.startDate);
+      const endDate = event.endDate ? new Date(event.endDate) : undefined;
 
-        if (!isValid(startDate) || (endDate && !isValid(endDate))) {
-          console.warn(`Invalid date format found in event: ${event.id}`, event);
-          // 不正な日付を持つイベントを除外するか、エラー処理を行う
-          // ここでは一旦そのまま進めるが、実際にはフィルタリング推奨
-        }
-
-        return {
-          ...event,
-          startDate,
-          endDate,
-          // details の型はサーバーのレスポンスに依存する
-          // 必要であればここで details の型変換も行う
-          details: event.details, // そのまま渡す
-        };
-      });
-    } catch (e) {
-      console.error("Error parsing timeline event dates:", e);
-      return []; // パースエラー時は空配列を返す
-    }
+      return {
+        ...event,
+        startDate,
+        endDate,
+        details: event.details,
+      };
+    });
   }, [rawEvents]);
 
   // timelineEvents からスケジュールデータのみを抽出
   const schedulesData = useMemo((): StudySchedule[] => {
     return timelineEvents
       .filter(event => event.type === 'schedule')
-      .map(event => event.details as StudySchedule); // details が StudySchedule であると仮定
+      .map(event => event.details as StudySchedule);
   }, [timelineEvents]);
 
 
-  // 日数を計算 (引数を Date オブジェクトに変更)
+  // 日数を計算
   const calculateDays = (startDate: Date, endDate: Date): number => {
-    if (!isValid(startDate) || !isValid(endDate) || isBefore(endDate, startDate)) return 0;
+    if (isBefore(endDate, startDate)) return 0;
     return differenceInDays(endDate, startDate) + 1;
   };
 
-  // 残り日数を計算 (引数を Date オブジェクトに変更)
+  // 残り日数を計算 
   const calculateRemainingDays = (endDate: Date): number => {
     const today = startOfToday();
-    if (!isValid(endDate) || isBefore(endDate, today)) return 0;
+    if (isBefore(endDate, today)) return 0;
     return differenceInDays(endDate, today) + 1;
   };
 
-  // 進捗状況を計算 (引数を Date オブジェクトに変更)
+  // 進捗状況を計算
   const calculateProgress = (startDate: Date, endDate: Date): number => {
     const today = startOfToday();
-    if (!isValid(startDate) || !isValid(endDate) || isBefore(endDate, startDate)) return 0;
     if (isBefore(today, startDate)) return 0;
     if (isAfter(today, endDate) || isEqual(today, endDate)) return 100;
 
     const totalDays = calculateDays(startDate, endDate);
-    // 開始日から今日までの日数を計算 (startOfDayで比較)
-    const elapsedDays = differenceInDays(today, startOfDay(startDate)) + 1;
+    if (totalDays <= 0) return 0;
 
-    return totalDays > 0 ? Math.round((elapsedDays / totalDays) * 100) : 0;
+    // 開始日から今日までの日数を計算
+    // elapsedDays の計算は startOfDay を使う必要はない（today は既に startOfToday() されている）
+    const elapsedDays = differenceInDays(today, startDate) + 1;
+
+    return Math.round((elapsedDays / totalDays) * 100);
   };
 
 
-  // コンテナ幅を監視する useEffect (依存配列を空に)
+  // コンテナ幅を監視する
   useEffect(() => {
     const container = ganttContainerRef.current;
     if (!container) return;
@@ -125,10 +114,10 @@ const SchedulesPage = () => {
     return () => {
       if (observer) observer.disconnect();
     };
-  }, []); // 依存配列を空にする
+  }, []);
 
 
-  if (isLoading) { // isLoading を使用
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center h-full">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -136,18 +125,15 @@ const SchedulesPage = () => {
     );
   }
 
-  // startOfDay の require 呼び出しを削除
-
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">スケジュール管理</h1>
-        {/* 新規作成ボタンを削除 */}
       </div>
 
-      {queryError && ( // queryError を使用
+      {queryError && (
         <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          エラー: {queryError.message} {/* エラーメッセージを表示 */}
+          エラー: {queryError.message}
         </div>
       )}
 
@@ -223,25 +209,17 @@ const SchedulesPage = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">1日の目標</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">バッファ</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">進捗</th>
-              {/* 操作列ヘッダーを削除 */}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {schedulesData.length > 0 ? ( // schedulesData を使用
+            {schedulesData.length > 0 ? (
               schedulesData.map((schedule) => {
-                // schedule.start_date と schedule.end_date は文字列のままなので、Date オブジェクトに変換して渡す
                 const startDateObj = parseISO(schedule.start_date);
                 const endDateObj = parseISO(schedule.end_date);
 
-                // Date オブジェクトが有効かチェック
-                if (!isValid(startDateObj) || !isValid(endDateObj)) {
-                  console.warn("Invalid date found in schedule:", schedule.id);
-                  return null; // 無効な日付を持つスケジュールはスキップ
-                }
-
-                const totalDays = calculateDays(startDateObj, endDateObj); // Date オブジェクトを渡す
-                const remainingDays = calculateRemainingDays(endDateObj); // Date オブジェクトを渡す
-                const progress = calculateProgress(startDateObj, endDateObj); // Date オブジェクトを渡す
+                const totalDays = calculateDays(startDateObj, endDateObj);
+                const remainingDays = calculateRemainingDays(endDateObj);
+                const progress = calculateProgress(startDateObj, endDateObj);
 
                 return (
                   <tr key={schedule.id}>
@@ -277,13 +255,11 @@ const SchedulesPage = () => {
                       </div>
                       <span className="text-xs text-gray-500">{progress}%</span>
                     </td>
-                    {/* 操作列セルを削除 */}
                   </tr>
                 );
               })
             ) : (
               <tr>
-                {/* colSpan を 5 に変更 */}
                 <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
                   スケジュールが登録されていません
                 </td>
@@ -292,8 +268,6 @@ const SchedulesPage = () => {
           </tbody>
         </table>
       </div>
-
-      {/* スケジュール編集モーダルを削除 */}
     </div>
   );
 };

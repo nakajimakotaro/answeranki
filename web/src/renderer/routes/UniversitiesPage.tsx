@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'; // Add useMemo
-import { parseISO, differenceInDays, startOfToday, isBefore, isValid, format } from 'date-fns';
+import { parseISO, differenceInDays, startOfToday, isBefore, format } from 'date-fns';
 import { trpc } from '../lib/trpc'; // Import tRPC hook - Removed .js
 // import { examService } from '../services/examService'; // Removed examService import
 import type { Exam, ExamInput } from '@shared/types/exam'; // Removed .js extension
@@ -240,8 +240,8 @@ const UniversitiesPage = () => {
   const calculateDaysRemaining = (date: string | null | undefined): number => {
     if (!date) return NaN;
     const todayDate = startOfToday();
-    const parsedDate = parseISO(date);
-    if (!isValid(parsedDate) || isBefore(parsedDate, todayDate)) return 0;
+    const parsedDate = parseISO(date); // Assume date from DB is valid and parseISO will throw if not
+    if (isBefore(parsedDate, todayDate)) return 0; // Keep check for past dates
     return differenceInDays(parsedDate, todayDate) + 1;
   };
 
@@ -322,7 +322,7 @@ const UniversitiesPage = () => {
                       </button>
                       <button
                         className="text-red-600 hover:text-red-900"
-                        onClick={() => university.id && handleDeleteUniversity(university.id)}
+                        onClick={() => handleDeleteUniversity(university.id)}
                         disabled={deleteUniversityMutation.isPending || (deleteUniversityMutation.variables?.id === university.id)}
                       >
                         <Trash className="h-5 w-5" />
@@ -404,7 +404,7 @@ const UniversitiesPage = () => {
                           </button>
                           <button
                             className="text-red-600 hover:text-red-900"
-                            onClick={() => exam.id && handleDeleteExam(exam.id)}
+                            onClick={() => handleDeleteExam(exam.id)}
                             disabled={deleteExamMutation.isPending || (deleteExamMutation.variables?.id === exam.id)}
                           >
                             <Trash className="h-5 w-5" />

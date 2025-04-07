@@ -20,7 +20,6 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000', // Your Node.js server address
         changeOrigin: true,
-        // rewrite: (path) => path.replace(/^\/api/, ''), // Optional: remove /api prefix
       },
       // Proxy media server requests
       '/media': {

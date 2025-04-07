@@ -9,18 +9,8 @@ export const mediaRouter = router({
    */
   clearCache: publicProcedure
     .mutation(async () => {
-      try {
-        // Call the imported function to clear the shared cache
-        clearMediaCache();
-        return { success: true, message: 'Media cache cleared successfully.' };
-      } catch (error) {
-        console.error('Failed to clear media cache via tRPC:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to clear media cache.',
-          cause: error,
-        });
-      }
+      clearMediaCache();
+      return { success: true, message: 'Media cache cleared successfully.' };
     }),
 });
 

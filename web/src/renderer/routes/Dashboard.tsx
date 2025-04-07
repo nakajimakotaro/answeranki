@@ -1,38 +1,27 @@
-import { useState, useEffect, useMemo } from 'react'; // Import useMemo
-import { format, parseISO, differenceInDays, startOfToday, isBefore, compareAsc } from 'date-fns'; // Import date-fns functions (removed unused isValid)
-// Import types from shared packages
-// Removed incorrect Textbook import
-import type { StudyLog } from '@shared/schemas/schedule'; // Adjust path if needed
-import type { TimelineEvent } from '@shared/types/timeline'; // Adjust path if needed
-// Removed Exam import, will use inferred type
+import { useState, useEffect, useMemo } from 'react';
+import { format, parseISO, differenceInDays, startOfToday, isBefore, compareAsc } from 'date-fns';
 import DailyLogInput from '../components/DailyLogInput.js';
 import { Calendar, ChevronRight, BookOpen, GraduationCap, Clock } from 'lucide-react';
-import { trpc } from '../lib/trpc.js'; // Import tRPC client
+import { trpc } from '../lib/trpc.js';
 import type { inferRouterOutputs } from '@trpc/server';
-import type { AppRouter } from '../../../../server/src/router'; // Adjust path if needed
+import type { AppRouter } from '../../../../server/src/router';
 
-// Infer types from router using correct procedure names
 type RouterOutput = inferRouterOutputs<AppRouter>;
-type TextbookOutput = RouterOutput['textbook']['getTextbooks'][number]; // Use getTextbooks
+type TextbookOutput = RouterOutput['textbook']['getTextbooks'][number];
 type StudyLogOutput = RouterOutput['schedule']['listLogs'][number];
 type TimelineEventOutput = RouterOutput['schedule']['getTimelineEvents'][number];
-// ProgressOutput is removed as getProgress procedure doesn't exist
-type ExamOutput = RouterOutput['exam']['getAll'][number]; // Use getAll
+type ExamOutput = RouterOutput['exam']['getAll'][number];
 
-// 計算された進捗情報の型定義 (Removed fields dependent on non-existent getProgress)
+// 計算された進捗情報の型定義
 interface CalculatedProgress {
   textbookId: number;
   title: string;
   subject: string;
-  // dailyGoal: number | null; // This might come from schedule data if available
   totalProblems: number;
   solvedToday: number;
-  totalSolved: number; // This needs calculation based on logs
-  progressPercentage: number; // This needs calculation based on logs and total problems
-  // isScheduledToday: boolean; // Requires schedule data
-  ankiDeckName: string | undefined;
-  // daysRemaining: number; // Removed
-  // dailyTarget: number; // Removed
+  totalSolved: number;
+  progressPercentage: number;
+  ankiDeckName: string | null | undefined; // Allow null or undefined
 }
 
 // 受験日カウントダウンの型定義
@@ -44,24 +33,22 @@ interface ExamCountdown {
 }
 
 const Dashboard = () => {
-  const [today] = useState(format(new Date(), 'yyyy-MM-dd')); // Use format for today's date string
-  const trpcUtils = trpc.useUtils(); // Get tRPC utils for invalidation
+  const [today] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const trpcUtils = trpc.useUtils();
 
   // --- tRPC Queries ---
   const textbooksQuery = trpc.textbook.getTextbooks.useQuery(undefined, {
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
   const logsQuery = trpc.schedule.listLogs.useQuery(
-    { start_date: today, end_date: today }, // Fetch logs for today
-    { staleTime: 60 * 1000 } // Cache for 1 minute
+    { start_date: today, end_date: today },
+    { staleTime: 60 * 1000 }
   );
-  // Fetch all exams for countdown calculation
   const examsQuery = trpc.exam.getAll.useQuery(undefined, {
-    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    staleTime: 10 * 60 * 1000,
   });
-  // Query for all logs to calculate total progress (might be large, consider backend aggregation)
   const allLogsQuery = trpc.schedule.listLogs.useQuery(undefined, {
-      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      staleTime: 5 * 60 * 1000,
   });
 
 
@@ -73,39 +60,34 @@ const Dashboard = () => {
   const isLoading = textbooksQuery.isLoading || logsQuery.isLoading || examsQuery.isLoading || allLogsQuery.isLoading;
   const error = textbooksQuery.error?.message || logsQuery.error?.message || examsQuery.error?.message || allLogsQuery.error?.message || null;
 
-  // Calculate Progress when data is available
   useEffect(() => {
     if (textbooksQuery.data && allLogsQuery.data) {
       calculateProgress(textbooksQuery.data, allLogsQuery.data, logsQuery.data || []);
     }
-  }, [textbooksQuery.data, allLogsQuery.data, logsQuery.data]); // Depend on fetched data
+  }, [textbooksQuery.data, allLogsQuery.data, logsQuery.data]);
 
-  // Calculate Countdowns when exam data is available
   useEffect(() => {
     if (examsQuery.data) {
       calculateExamCountdowns(examsQuery.data);
     }
-  }, [examsQuery.data]); // Depend on fetched exam data
+  }, [examsQuery.data]);
 
-  // 進捗情報の計算 (Client-side calculation)
+  // 進捗情報の計算
   const calculateProgress = (
       books: TextbookOutput[],
       allLogs: StudyLogOutput[],
       todayLogs: StudyLogOutput[]
   ) => {
     const progressData: CalculatedProgress[] = books.map(book => {
-      if (!book.id) return null; // Should not happen with DB data
+      if (!book.id) return null;
 
-      // Calculate total solved problems for this textbook from all logs
       const totalSolved = allLogs
         .filter(log => log.textbook_id === book.id)
         .reduce((sum, log) => sum + (log.actual_amount || 0), 0);
 
-      // Find today's log entry
       const todayLog = todayLogs.find(log => log.textbook_id === book.id);
       const solvedToday = todayLog?.actual_amount || 0;
 
-      // Calculate progress percentage
       const progressPercentage = book.total_problems > 0
         ? Math.round((totalSolved / book.total_problems) * 100)
         : 0;
@@ -120,56 +102,46 @@ const Dashboard = () => {
         progressPercentage: progressPercentage,
         ankiDeckName: book.anki_deck_name,
       };
-    }).filter((item): item is CalculatedProgress => item !== null); // Filter out potential nulls
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
 
     setProgress(progressData);
   };
 
-  // 受験日カウントダウンの計算 (Uses data from examsQuery)
+  // 受験日カウントダウンの計算
   const calculateExamCountdowns = (exams: ExamOutput[]) => {
-    const todayDate = startOfToday(); // Get today's date at midnight
+    const todayDate = startOfToday();
 
     const countdownData = exams
       .map(exam => {
-        // exam.date is guaranteed to exist by the filter before this function call.
-        const examDate = parseISO(exam.date); // Use exam.date
-        // Keep isBefore check as it's application logic, not data validation.
+        const examDate = parseISO(exam.date);
         if (isBefore(examDate, todayDate)) {
-          return null; // Skip past dates
+          return null;
         }
-        // differenceInDays calculates full days, add 1 for inclusive count
         const diffDays = differenceInDays(examDate, todayDate) + 1;
 
-        // Map Exam properties to ExamCountdown properties
-        // exam.is_mock の値に基づいて '模試' または '本番' を設定
         const displayExamType = exam.is_mock ? '模試' : '本番';
 
         return {
-          universityName: exam.name || '不明', // Use exam.name
-          // examType には判定結果（'模試' or '本番'）を入れる
+          universityName: exam.name || '不明',
           examType: displayExamType,
           daysRemaining: diffDays,
-          examDate: exam.date, // Use exam.date
-          // Store the parsed date for sorting
+          examDate: exam.date,
           parsedDate: examDate
         };
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null) // Remove null entries
-      // Sort by parsed date using compareAsc
+      .filter((item): item is NonNullable<typeof item> => item !== null)
       .sort((a, b) => compareAsc(a.parsedDate, b.parsedDate));
 
-    setCountdowns(countdownData.slice(0, 3)); // 上位3つのみ表示
+    setCountdowns(countdownData.slice(0, 3));
   };
 
-  // 学習ログの更新 (Invalidate tRPC queries)
+  // 学習ログの更新
   const handleLogUpdate = () => {
-    // Invalidate today's logs and all logs to trigger recalculations
     trpcUtils.schedule.listLogs.invalidate({ start_date: today, end_date: today });
-    trpcUtils.schedule.listLogs.invalidate(); // Invalidate the query for all logs
-    // No need to manually set state, useEffect hooks will recalculate progress
+    trpcUtils.schedule.listLogs.invalidate();
   };
 
-  if (isLoading) { // Use isLoading from tRPC hooks
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center h-full">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -181,11 +153,10 @@ const Dashboard = () => {
     return (
       <div className="p-4">
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          <p>エラー: {error}</p> {/* Display error message from tRPC hooks */}
+          <p>エラー: {error}</p>
           <button
             className="mt-2 bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
             onClick={() => {
-                // Optionally refetch queries on error button click
                 textbooksQuery.refetch();
                 logsQuery.refetch();
                 examsQuery.refetch();
@@ -212,15 +183,13 @@ const Dashboard = () => {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {countdowns.map((countdown, index) => {
-              // 試験種別（'模試' or '本番'）に応じた色を設定
               const borderColor = countdown.examType === '模試'
-                ? 'border-yellow-500' // 模試は黄色
-                : 'border-blue-500';   // 本番は青色 (例: primary color)
+                ? 'border-yellow-500'
+                : 'border-blue-500';
 
-              // テキスト色も設定
               const textColor = countdown.examType === '模試'
-                ? 'text-yellow-600' // 模試は黄色系
-                : 'text-blue-600';   // 本番は青色系 (例: primary color)
+                ? 'text-yellow-600'
+                : 'text-blue-600';
 
               return (
                 <div key={index} className={`bg-white rounded-lg shadow p-4 border-l-4 ${borderColor}`}>
@@ -254,10 +223,8 @@ const Dashboard = () => {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">参考書</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">科目</th>
-                {/* Removed 目標 header */}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">今日の実績</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">全体進捗</th>
-                {/* Removed 残り日数 header */}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -271,7 +238,6 @@ const Dashboard = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.subject}</td>
-                    {/* Removed dailyTarget cell */}
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.solvedToday}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
@@ -282,12 +248,10 @@ const Dashboard = () => {
                       </div>
                       <span className="text-xs text-gray-500 dark:text-gray-400">{item.progressPercentage}% ({item.totalSolved}/{item.totalProblems})</span>
                     </td>
-                    {/* Removed daysRemaining cell */}
-                  </tr> // Closing tr tag was missing here
+                  </tr>
                 ))
               ) : (
                 <tr>
-                  {/* Adjusted colspan */}
                   <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
                     データがありません
                   </td>
@@ -306,10 +270,10 @@ const Dashboard = () => {
         </h2>
         <div className="bg-white rounded-lg shadow p-4 dark:bg-gray-800">
           <DailyLogInput
-            textbooks={textbooksQuery.data || []} // Pass data from tRPC query
+            textbooks={textbooksQuery.data || []}
             date={today}
             onLogUpdated={handleLogUpdate}
-            existingLogs={logsQuery.data || []} // Pass today's logs from tRPC query
+            existingLogs={logsQuery.data || []}
           />
         </div>
       </div>

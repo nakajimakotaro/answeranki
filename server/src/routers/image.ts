@@ -7,8 +7,7 @@ import { promisify } from 'util';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { appRouter } from '../router.js'; // Import appRouter to create caller inside mutation
-import { createCallerFactory } from '../trpc.js';
+import { callAnkiConnect } from '../services/ankiService.js';
 
 const execAsync = promisify(exec);
 
@@ -34,20 +33,6 @@ const convertToAvifWithImageMagick = async (inputBuffer: Buffer): Promise<Buffer
         throw new Error('ImageMagick produced an empty AVIF file.');
     }
     return avifBuffer;
-  } catch (error) {
-    let errorMessage = 'ImageMagick conversion failed.';
-    if (error instanceof Error) {
-        if (error.message.includes('command not found') || error.message.includes('not recognized')) {
-            errorMessage = 'ImageMagick command not found. Please ensure ImageMagick is installed and in the system PATH.';
-        } else if (error.message.includes('timeout')) {
-            errorMessage = 'ImageMagick conversion timed out (15 seconds).';
-        } else {
-            errorMessage = `ImageMagick conversion failed: ${error.message}`;
-        }
-    } else {
-        errorMessage = `ImageMagick conversion failed: ${String(error)}`;
-    }
-    throw new Error(errorMessage);
   } finally {
     await fs.unlink(tempInputPath).catch(() => {});
     await fs.unlink(tempOutputPath).catch(() => {});
@@ -71,18 +56,10 @@ export const imageRouter = router({
   convertToAvif: publicProcedure
     .input(ConvertToAvifInputSchema)
     .mutation(async ({ input }) => {
-      try {
-        const buffer = Buffer.from(input.base64Data, 'base64');
-        const avifBuffer = await convertToAvifWithImageMagick(buffer);
-        const avifBase64 = avifBuffer.toString('base64');
-        return { success: true, data: avifBase64 };
-      } catch (error) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: error instanceof Error ? error.message : 'Unknown error during AVIF conversion',
-          cause: error,
-        });
-      }
+      const buffer = Buffer.from(input.base64Data, 'base64');
+      const avifBuffer = await convertToAvifWithImageMagick(buffer);
+      const avifBase64 = avifBuffer.toString('base64');
+      return { success: true, data: avifBase64 };
     }),
 
   /**
@@ -96,41 +73,30 @@ export const imageRouter = router({
       let finalFilename = filename;
       let uploadData = base64Data;
 
-      try {
-        if (convertToAvif) {
-          try {
-            const inputBuffer = Buffer.from(base64Data, 'base64');
-            const avifBuffer = await convertToAvifWithImageMagick(inputBuffer);
-            uploadData = avifBuffer.toString('base64');
-             finalFilename = finalFilename.replace(/\.[^/.]+$/, '') + '.avif';
-          } catch (conversionError) {
-            throw new Error(`AVIF conversion failed: ${conversionError instanceof Error ? conversionError.message : String(conversionError)}`);
-          }
-        }
-
-        const caller = createCallerFactory(appRouter)({});
-
-        const ankiResponse = await caller.anki.proxy({
-          action: 'storeMediaFile',
-          params: {
-            filename: finalFilename,
-            data: uploadData,
-          },
-        });
-
-        if (ankiResponse && typeof ankiResponse === 'object' && 'error' in ankiResponse && ankiResponse.error) {
-           throw new Error(`AnkiConnect error: ${ankiResponse.error}`);
-        }
-
-        return { success: true, filename: finalFilename };
-
-      } catch (error) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: error instanceof Error ? error.message : 'Unknown error during image upload process',
-          cause: error,
-        });
+      if (convertToAvif) {
+        const inputBuffer = Buffer.from(base64Data, 'base64');
+        const avifBuffer = await convertToAvifWithImageMagick(inputBuffer);
+        uploadData = avifBuffer.toString('base64');
+        finalFilename = finalFilename.replace(/\.[^/.]+$/, '') + '.avif';
       }
+
+      const ankiResponse = await callAnkiConnect({
+        action: 'storeMediaFile',
+        params: {
+          filename: finalFilename,
+          data: uploadData,
+        },
+      });
+
+      if (ankiResponse.error) {
+          throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: `AnkiConnect failed to store media file: ${ankiResponse.error}`,
+          });
+      }
+
+      return { success: true, filename: finalFilename };
+
     }),
 });
 

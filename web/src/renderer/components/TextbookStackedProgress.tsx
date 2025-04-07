@@ -1,27 +1,22 @@
-import React, { useState, useMemo } from 'react'; // Import React, removed useEffect
-import { parseISO, compareAsc, isWithinInterval, startOfToday, differenceInDays, isValid, getYear, format, setMonth, setYear, isBefore } from 'date-fns'; // Import date-fns functions
-// Removed imports from scheduleService
-import { trpc } from '../lib/trpc'; // Import tRPC client
+import React, { useState, useMemo } from 'react';
+import { parseISO, compareAsc, isWithinInterval, startOfToday, differenceInDays, getYear, format, setMonth, setYear, isBefore } from 'date-fns';
+import { trpc } from '../lib/trpc';
 import type { inferRouterOutputs } from '@trpc/server';
-import type { AppRouter } from '../../../../server/src/router'; // Adjust path if needed
-import type { Exam } from '../../../../shared/types/exam'; // Import shared Exam type
-import type { StudySchedule } from '../../../../shared/schemas/schedule'; // Import StudySchedule from shared schema
-import { BarChart2, BookOpen, Filter, AlertTriangle, CheckCircle, Clock, BookMarked, Loader2 } from 'lucide-react'; // Added Loader2
+import type { AppRouter } from '../../../../server/src/router';
+import type { Exam } from '../../../../shared/types/exam';
+import type { StudySchedule } from '../../../../shared/schemas/schedule';
+import { BarChart2, BookOpen, Filter, AlertTriangle, CheckCircle, Clock, BookMarked, Loader2 } from 'lucide-react';
 
 // Infer tRPC types
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type TextbookOutput = RouterOutput['textbook']['getTextbooks'][number];
 type TimelineEventOutput = RouterOutput['schedule']['getTimelineEvents'][number];
-// Assuming getProgress returns a structure like this - adjust if needed
-// TODO: Define ProgressOutput properly when getProgress is implemented
 interface ProgressOutput {
     textbook: TextbookOutput;
-    schedule?: StudySchedule; // Assuming StudySchedule is the correct type from shared
+    schedule?: StudySchedule;
     progress: {
         solvedProblems: number;
-        // Add other progress fields if available
     };
-    // logs?: StudyLogOutput[]; // Assuming logs are returned
 }
 
 
@@ -53,10 +48,6 @@ const TextbookStackedProgress = ({
       undefined, { staleTime: 5 * 60 * 1000 }
   );
 
-  // TODO: Implement getProgress query - This is a placeholder
-  // We need a way to fetch progress for *all* relevant textbooks/schedules efficiently.
-  // A single query might not be ideal. Maybe a batch query or adjust the component logic.
-  // For now, we'll assume progressData is fetched elsewhere or not used yet.
   const progressData: { [key: number]: ProgressOutput } = {}; // Placeholder
 
   // --- Derived State and Data Processing ---
@@ -67,26 +58,21 @@ const TextbookStackedProgress = ({
       const eventsToProcess = Array.isArray(rawTimelineEvents) ? rawTimelineEvents : [];
 
       // Parse dates and filter/map
-      const processedEvents = eventsToProcess.map(event => {
-          const eventStartDate = event.startDate ? parseISO(event.startDate) : null;
-          const eventEndDate = event.endDate ? parseISO(event.endDate) : null;
-          return {
-              ...event,
-              // Assuming details are correctly typed by the router output
-              startDate: eventStartDate && isValid(eventStartDate) ? eventStartDate : null,
-              endDate: eventEndDate && isValid(eventEndDate) ? eventEndDate : undefined,
-          };
-      }).filter(event => event.startDate !== null); // Filter out invalid start dates
+      const processedEvents = eventsToProcess.map(event => ({
+          ...event,
+          startDate: parseISO(event.startDate),
+          endDate: event.endDate ? parseISO(event.endDate) : undefined,
+      }));
 
       const extractedSchedules: StudySchedule[] = processedEvents
           .filter((event): event is typeof event & { type: 'schedule', details: StudySchedule } =>
-              event.type === 'schedule' && !!event.details // Add null/undefined check for details
+              event.type === 'schedule'
           )
           .map(event => event.details);
 
       const extractedExams: Exam[] = processedEvents
           .filter((event): event is typeof event & { type: 'exam' | 'mock_exam', details: Exam } =>
-              (event.type === 'exam' || event.type === 'mock_exam') && !!event.details // Add null/undefined check for details
+              event.type === 'exam' || event.type === 'mock_exam'
           )
           .map(event => event.details);
 
@@ -104,7 +90,7 @@ const TextbookStackedProgress = ({
 
   // Filter schedules based on selected subject
   const filteredSchedules = useMemo(() => {
-    if (!textbooksData) return []; // Need textbooksData to filter by subject
+    if (!textbooksData) return [];
     let filtered = schedules;
 
     // Filter by subject
@@ -116,49 +102,27 @@ const TextbookStackedProgress = ({
       });
     }
 
-    // Sort by start date
-    return [...filtered].sort((a, b) => {
-        const dateA = parseISO(a.start_date);
-        const dateB = parseISO(b.start_date);
-        if (!isValid(dateA) || !isValid(dateB)) return 0; // Handle invalid dates
-        return compareAsc(dateA, dateB);
-    });
-  }, [schedules, textbooksData, selectedSubject]); // Depend on schedules and textbooksData
+    return [...filtered].sort((a, b) => compareAsc(parseISO(a.start_date), parseISO(b.start_date)));
+  }, [schedules, textbooksData, selectedSubject]);
 
-  // Sort exams by date
+  // Sort exams by date (trusting date format and existence from server)
   const sortedExams = useMemo(() => {
-    const validExams = exams.filter(exam => exam.date && isValid(parseISO(exam.date)));
-    return [...validExams].sort((a, b) => {
-        const dateA = parseISO(a.date);
-        const dateB = parseISO(b.date);
-        if (!isValid(dateA) || !isValid(dateB)) return 0; // Handle invalid dates
-        return compareAsc(dateA, dateB);
-    });
+    const validExams = exams.filter(exam => exam.date);
+    return [...validExams].sort((a, b) => compareAsc(parseISO(a.date!), parseISO(b.date!)));
   }, [exams]);
 
-  // Check if a date string is within the component's start/end date range
-  const isWithinDateRange = (dateString: string | null | undefined): boolean => {
-    if (!dateString) return false;
-    try {
-      const targetDate = parseISO(dateString);
-      const start = parseISO(startDate); // Component's start date prop
-      const end = parseISO(endDate);     // Component's end date prop
-      if (!isValid(targetDate) || !isValid(start) || !isValid(end)) return false;
-      return isWithinInterval(targetDate, { start, end });
-    } catch {
-      return false;
-    }
+  const isWithinDateRange = (dateString: string): boolean => {
+    const targetDate = parseISO(dateString);
+    const start = parseISO(startDate);
+    const end = parseISO(endDate);
+    return isWithinInterval(targetDate, { start, end });
   };
 
-  // Calculate actual progress percentage
   const calculateProgress = (textbookId: number): number => {
-    const progress = progressData[textbookId]; // Use placeholder progressData
-    const textbook = textbooksData?.find(t => t.id === textbookId); // Get textbook from query
+    const progress = progressData[textbookId];
+    const textbook = textbooksData?.find(t => t.id === textbookId);
 
-    if (!progress || !textbook || !textbook.total_problems || textbook.total_problems <= 0) {
-        return 0;
-    }
-    if (!progress.progress || typeof progress.progress.solvedProblems !== 'number') {
+    if (!progress?.progress || typeof progress.progress.solvedProblems !== 'number' || !textbook?.total_problems || textbook.total_problems <= 0) {
         return 0;
     }
     return (progress.progress.solvedProblems / textbook.total_problems) * 100;
@@ -170,16 +134,14 @@ const TextbookStackedProgress = ({
     const start = parseISO(schedule.start_date);
     const end = parseISO(schedule.end_date);
 
-    if (!isValid(start) || !isValid(end)) return 0; // Invalid dates
-
     const totalDurationDays = differenceInDays(end, start);
-    if (totalDurationDays < 0) return 0; // Invalid range
+    if (totalDurationDays < 0) return 0;
 
-    if (isBefore(today, start)) return 0; // Not started
-    if (!isBefore(today, end)) return 100; // Finished or ends today
+    if (isBefore(today, start)) return 0;
+    if (!isBefore(today, end)) return 100;
 
     const elapsedDays = differenceInDays(today, start);
-    const totalDays = totalDurationDays + 1; // Total days inclusive
+    const totalDays = totalDurationDays + 1;
 
     return totalDays > 0 ? Math.min(100, Math.round(((elapsedDays + 1) / totalDays) * 100)) : 0;
   };
@@ -204,8 +166,8 @@ const TextbookStackedProgress = ({
   };
 
   // --- Loading and Error Handling ---
-  const isLoading = isLoadingTextbooks || isLoadingTimeline; // Add isLoadingProgress when implemented
-  const queryError = errorTextbooks || errorTimeline; // Add errorProgress when implemented
+  const isLoading = isLoadingTextbooks || isLoadingTimeline;
+  const queryError = errorTextbooks || errorTimeline;
 
   if (isLoading) {
     return (
@@ -219,14 +181,11 @@ const TextbookStackedProgress = ({
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         <p>データの読み込み中にエラーが発生しました: {queryError.message}</p>
-        {/* TODO: Add refetch capability */}
-        {/* <button onClick={() => queryError.refetch()}>再試行</button> */}
       </div>
     );
   }
 
   // --- Render Logic ---
-  // Ensure textbooksData is available before rendering dependent parts
   if (!textbooksData) {
       return (
           <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
@@ -266,7 +225,7 @@ const TextbookStackedProgress = ({
           試験日程 (期間内)
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          {sortedExams.filter(exam => isWithinDateRange(exam.date)).map((exam, index) => (
+          {sortedExams.filter(exam => isWithinDateRange(exam.date!)).map((exam, index) => (
             <div key={exam.id ?? index} className="flex items-center p-2 rounded-md border border-gray-200">
               <div className={`w-3 h-3 ${getExamTypeColor(exam)} rounded-full mr-2 flex-shrink-0`}></div>
               <div>
@@ -274,12 +233,12 @@ const TextbookStackedProgress = ({
                   {exam.is_mock ? exam.name : (exam.university_name ? `${exam.university_name} ${exam.name}` : exam.name)}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {exam.is_mock ? '模試' : '本番'} - {exam.date ? format(parseISO(exam.date), 'yyyy/MM/dd') : '日付不明'}
+                  {exam.is_mock ? '模試' : '本番'} - {format(parseISO(exam.date!), 'yyyy/MM/dd')}
                 </div>
               </div>
             </div>
           ))}
-          {sortedExams.filter(exam => isWithinDateRange(exam.date)).length === 0 && (
+          {sortedExams.filter(exam => isWithinDateRange(exam.date!)).length === 0 && (
             <div className="text-sm text-gray-500 col-span-full">期間内に表示する試験日程がありません</div>
           )}
         </div>
@@ -296,7 +255,7 @@ const TextbookStackedProgress = ({
             {filteredSchedules.map((schedule) => {
               // Find textbook using textbooksData from useQuery
               const textbook = textbooksData.find(t => t.id === schedule.textbook_id);
-              if (!textbook) return null; // Should not happen if data is consistent
+              if (!textbook) return null;
 
               const actualProgress = calculateProgress(textbook.id);
               const plannedProgress = calculatePlannedProgress(schedule);
@@ -342,13 +301,12 @@ const TextbookStackedProgress = ({
                        </span>
                     </div>
                   </div>
-                  {/* Details (Placeholder for progress data) */}
                   <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <span className="text-gray-500">総問題数:</span> {textbook.total_problems ?? 'N/A'}問
+                      <span className="text-gray-500">総問題数:</span> {textbook.total_problems}問
                     </div>
                     <div>
-                      <span className="text-gray-500">解いた問題:</span> {progressData[textbook.id]?.progress?.solvedProblems ?? 'N/A'}問
+                      <span className="text-gray-500">解いた問題:</span> {progressData[textbook.id]?.progress?.solvedProblems ?? 'N/A'}問 {/* Keep N/A for placeholder */}
                     </div>
                   </div>
                 </div>

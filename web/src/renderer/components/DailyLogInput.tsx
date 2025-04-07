@@ -30,7 +30,7 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
   const [selectedTextbook, setSelectedTextbook] = useState<TextbookOutput | null>(null); // Use inferred type
   const [actualAmount, setActualAmount] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [existingLog, setExistingLog] = useState<StudyLog | null>(null);
 
@@ -40,7 +40,7 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
       setActualAmount(0);
       setNotes('');
       setExistingLog(null);
-      setError(null); // Clear error on reset
+      setValidationError(null);
       // Keep success message briefly? Or clear immediately? Clearing for now.
       // setSuccess(null);
   };
@@ -56,11 +56,6 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
       resetForm();
       setTimeout(() => setSuccess(null), 3000); // Clear success message after 3s
     },
-    onError: (err) => {
-      console.error('Error creating study log:', err);
-      setError(`学習ログの保存中にエラーが発生しました: ${err.message}`);
-      setSuccess(null); // Clear success message on error
-    },
   });
 
   const updateLogMutation = trpc.schedule.updateLog.useMutation({
@@ -72,18 +67,13 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
       // resetForm();
       setTimeout(() => setSuccess(null), 3000); // Clear success message after 3s
     },
-    onError: (err) => {
-      console.error('Error updating study log:', err);
-      setError(`学習ログの更新中にエラーが発生しました: ${err.message}`);
-      setSuccess(null); // Clear success message on error
-    },
   });
 
 
   // 参考書が選択されたときの処理
   useEffect(() => {
-    setError(null); // Clear errors when selection changes
-    setSuccess(null); // Clear success when selection changes
+    setValidationError(null);
+    setSuccess(null);
     if (selectedTextbook && selectedTextbook.id) {
       // 既存のログを検索
       const log = existingLogs.find(l => l.textbook_id === selectedTextbook.id);
@@ -94,15 +84,9 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
         setNotes(log.notes || '');
       } else {
         setExistingLog(null);
-        // Don't reset amount/notes if just switching between textbooks without logs
-        // setActualAmount(0);
-        // setNotes('');
       }
     } else {
-        // Clear form only if selection is cleared, not just changed
          setExistingLog(null);
-         // setActualAmount(0); // Keep values if user deselects temporarily?
-         // setNotes('');
     }
   }, [selectedTextbook, existingLogs]);
 
@@ -111,46 +95,29 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
     e.preventDefault();
 
     if (!selectedTextbook || !selectedTextbook.id) {
-      setError('参考書を選択してください');
+      setValidationError('参考書を選択してください');
       return;
     }
 
-    // Clear previous errors/success messages before attempting mutation
-    setError(null);
+    setValidationError(null);
     setSuccess(null);
 
-    // Input data structure should match the Zod schema defined in the tRPC router
-    // Assuming createLog input: { date: string, textbook_id: number, actual_amount: number, notes?: string }
-    // Assuming updateLog input: { id: number, date: string, textbook_id: number, actual_amount: number, notes?: string }
     const logInputData = {
         date,
         textbook_id: selectedTextbook.id,
         actual_amount: actualAmount,
-        notes: notes || undefined, // Send undefined if notes are empty
-        // planned_amount is likely calculated or not needed for log creation/update
+        notes: notes || undefined,
     };
 
-    try {
-      if (existingLog && existingLog.id) {
-        // 既存のログを更新
-        // Pass the full object expected by the mutation input schema
+    if (existingLog && existingLog.id) {
+      // 既存のログを更新
         await updateLogMutation.mutateAsync({
             id: existingLog.id,
             ...logInputData
-            // Ensure all required fields by the Zod schema are included
         });
-        // Success/reset handled by onSuccess callback
       } else {
         // 新しいログを作成
         await createLogMutation.mutateAsync(logInputData);
-         // Success/reset handled by onSuccess callback
-      }
-     } catch (err) {
-       // Error is handled by the onError callback in useMutation hooks
-       // This catch block might not be strictly necessary unless mutateAsync throws differently
-        if (!error) { // Set a generic error if onError didn't set one
-            setError('ログの保存/更新リクエストに失敗しました。');
-        }
     }
   };
 
@@ -159,10 +126,9 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
 
   return (
     <div>
-      {/* Display mutation errors */}
-      {error && (
-        <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          {error}
+      {validationError && (
+        <div className="mb-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
+          {validationError}
         </div>
       )}
 

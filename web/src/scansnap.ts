@@ -1,36 +1,29 @@
-// Server and connection constants
 const SERVER_ID = "ScanSnapWebSDK";
 const DEFAULT_PORT = "45537";
 const VERSION = "1_0_3";
 
-// ScanSnap property constants
-// continueScan values
 const CONTINUE_SCAN = {
   NORMAL: 0,
   CONTINUE: 1,
   MANUAL_FEED: 2
 } as const;
 
-// continueScanReturnPath values
 const CONTINUE_SCAN_RETURN_PATH = {
   NORMAL: 0,
   CONTINUE: 1
 } as const;
 
-// multiFeedControl values
 const MULTI_FEED_CONTROL = {
   DISABLED: 0,
   LENGTH: 1,
   OVERLAP: 2
 } as const;
 
-// paperProtection values
 const PAPER_PROTECTION = {
   DISABLED: 0,
   ENABLED: 1
 } as const;
 
-// paperSize values
 const PAPER_SIZE = {
   AUTO: 0,
   A4: 1,
@@ -44,7 +37,6 @@ const PAPER_SIZE = {
   LEGAL: 9
 } as const;
 
-// searchableLang values
 const SEARCHABLE_LANG = {
   JAPANESE: 0,
   ENGLISH: 1,
@@ -76,25 +68,21 @@ const SEARCHABLE_LANG = {
   NONE: 100
 } as const;
 
-// format values
 const FORMAT = {
   PDF: 1,
   JPEG: 2
 } as const;
 
-// searchable values
 const SEARCHABLE = {
   DISABLED: 0,
   ENABLED: 1
 } as const;
 
-// blankPageSkip values
 const BLANK_PAGE_SKIP = {
   DISABLED: 0,
   ENABLED: 1
 } as const;
 
-// colorMode values
 const COLOR_MODE = {
   AUTO: 1,
   COLOR: 2,
@@ -102,19 +90,16 @@ const COLOR_MODE = {
   GRAY: 5
 } as const;
 
-// deskew values
 const DESKEW = {
   DISABLED: 0,
   ENABLED: 1
 } as const;
 
-// reduceBleedThrough values
 const REDUCE_BLEED_THROUGH = {
   DISABLED: 0,
   ENABLED: 1
 } as const;
 
-// rotation values
 const ROTATION = {
   NONE: 0,
   AUTO: 1,
@@ -126,7 +111,6 @@ const ROTATION = {
   LEFT_90_RIGHT_LEFT: 7
 } as const;
 
-// scanMode values
 const SCAN_MODE = {
   NORMAL: 0,
   AUTO: 1,
@@ -135,19 +119,16 @@ const SCAN_MODE = {
   AUTO_MODE: 99
 } as const;
 
-// scanningSide values
 const SCANNING_SIDE = {
   DUPLEX: 0,
   SIMPLEX: 1
 } as const;
 
-// scanType values
 const SCAN_TYPE = {
   NORMAL: 0,
   E_DOCUMENT: 1
 } as const;
 
-// compression values
 const COMPRESSION = {
   LOW: 1,
   MEDIUM_LOW: 2,
@@ -162,52 +143,52 @@ const COMPRESSION = {
 interface ScanState {
   /** Controls whether scanning continues after the current batch. */
   continueScan: typeof CONTINUE_SCAN[keyof typeof CONTINUE_SCAN];
-  
+
   /** Controls multi-feed detection method. */
   multiFeedControl: typeof MULTI_FEED_CONTROL[keyof typeof MULTI_FEED_CONTROL];
-  
+
   /** Enables/disables paper jam protection. */
   paperProtection: typeof PAPER_PROTECTION[keyof typeof PAPER_PROTECTION];
-  
+
   /** Specifies the paper size for scanning. */
   paperSize: typeof PAPER_SIZE[keyof typeof PAPER_SIZE];
-  
+
   /** Specifies the language for OCR when creating searchable PDFs. */
   searchableLang: typeof SEARCHABLE_LANG[keyof typeof SEARCHABLE_LANG];
-  
+
   /** Specifies the output file format (PDF or JPEG). */
   format: typeof FORMAT[keyof typeof FORMAT];
-  
+
   /** Enables/disables searchable PDF creation. */
   searchable: typeof SEARCHABLE[keyof typeof SEARCHABLE];
-  
+
   /** Enables/disables blank page detection and removal. */
   blankPageSkip: typeof BLANK_PAGE_SKIP[keyof typeof BLANK_PAGE_SKIP];
-  
+
   /** Specifies the color mode for scanning. */
   colorMode: typeof COLOR_MODE[keyof typeof COLOR_MODE];
-  
+
   /** Enables/disables automatic document straightening. */
   deskew: typeof DESKEW[keyof typeof DESKEW];
-  
+
   /** Enables/disables reduction of bleed-through from the reverse side of thin documents. */
   reduceBleedThrough: typeof REDUCE_BLEED_THROUGH[keyof typeof REDUCE_BLEED_THROUGH];
-  
+
   /** Specifies the rotation to apply to scanned images. */
   rotation: typeof ROTATION[keyof typeof ROTATION];
-  
+
   /** Specifies the scan resolution mode. */
   scanMode: typeof SCAN_MODE[keyof typeof SCAN_MODE];
-  
+
   /** Specifies whether to scan one side or both sides of documents. */
   scanningSide: typeof SCANNING_SIDE[keyof typeof SCANNING_SIDE];
-  
+
   /** Specifies the type of document being scanned. */
   scanType: typeof SCAN_TYPE[keyof typeof SCAN_TYPE];
-  
+
   /** Specifies the compression level for the output file. */
   compression: typeof COMPRESSION[keyof typeof COMPRESSION];
-  
+
   /** Controls the return path behavior for continuous scanning. */
   continueScanReturnPath: typeof CONTINUE_SCAN_RETURN_PATH[keyof typeof CONTINUE_SCAN_RETURN_PATH] | null;
 }
@@ -334,8 +315,7 @@ class ScanSnapWebSDK {
       compression: COMPRESSION.MEDIUM,
       continueScanReturnPath: CONTINUE_SCAN_RETURN_PATH.CONTINUE
     };
-    
-    // Try to restore session from local storage
+
     this.#restoreSessionFromStorage();
   }
 
@@ -353,11 +333,9 @@ class ScanSnapWebSDK {
    */
   async initialize(): Promise<number> {
     this.#isInitialized = true;
-    
-    // If we have a valid session ID from local storage, try to use it
+
     if (this.#sessionId) {
       try {
-        // Verify the session is still valid
         const sessionData: SessionData = await this.#getSessionId();
         if (sessionData?.keyword === SERVER_ID && sessionData?.sessionid) {
           this.#sessionId = sessionData.sessionid;
@@ -366,10 +344,9 @@ class ScanSnapWebSDK {
         }
       } catch (err) {
         console.log("Stored session is no longer valid, requesting new session:", err);
-        // Continue with normal initialization if stored session is invalid
       }
     }
-    
+
     try {
       const sessionData: SessionData = await this.#getSessionId();
       if (sessionData?.keyword === SERVER_ID && sessionData?.sessionid) {
@@ -377,7 +354,7 @@ class ScanSnapWebSDK {
         this.#saveSessionToStorage();
         return sessionData.code;
       }
-      
+
       const portResult: number = await this.#requestPort();
       this.#isInitialized = portResult === 0;
       if (this.#isInitialized) {
@@ -407,7 +384,6 @@ class ScanSnapWebSDK {
     try {
       this.#isScanning = true;
       const response: number = await this.#requestScan();
-      // Save session after successful scan to preserve scan file info
       if (response === 0) {
         this.#saveSessionToStorage();
       }
@@ -430,9 +406,9 @@ class ScanSnapWebSDK {
     headers = {},
     fileParams = [],
     fileNamePrefix = ""
-  }: UploadParams): Promise<{ 
-    uploadResults: Array<Record<string, unknown> | null>; 
-    reportResult: Record<string, unknown> 
+  }: UploadParams): Promise<{
+    uploadResults: Array<Record<string, unknown> | null>;
+    reportResult: Record<string, unknown>
   }> {
     if (!files?.length) {
       throw new Error("No files specified");
@@ -441,7 +417,7 @@ class ScanSnapWebSDK {
     const cleanPrefix: string = fileNamePrefix
       ?.slice(0, 50)
       .replace(/[^a-zA-Z0-9-]+/g, "") || "";
-    
+
     const blobs: ArrayBuffer[] = await Promise.all(
       files.map(fileId => this.getBlobData(fileId))
     );
@@ -450,13 +426,13 @@ class ScanSnapWebSDK {
       const fileInfo: FileInfo | undefined = this.#scanFilesInfo.get(files[index]);
       if (!fileInfo) return null;
 
-      const fileName: string = cleanPrefix ? 
-        `${cleanPrefix}_${fileInfo.fileName}` : 
+      const fileName: string = cleanPrefix ?
+        `${cleanPrefix}_${fileInfo.fileName}` :
         fileInfo.fileName;
-      
+
       const type: string = fileName.endsWith('.jpg') ? 'image/jpeg' : 'application/pdf';
       const file: File = new File([blob], fileName, { type });
-      
+
       const formData: FormData = new FormData();
       formData.append('file', file);
       if (fileParams[index]) {
@@ -590,7 +566,7 @@ class ScanSnapWebSDK {
         const paddedIndex: string = index.toString().padStart(3, '0');
         const [name, ...rest] = item.fileName.split('.');
         const fileName: string = `${name.split('_')[0]}_${paddedIndex}.${rest.join('.')}`;
-        
+
         this.#scanFilesInfo.set(item.fileId, {
           fileId: item.fileId,
           fileName,
@@ -648,14 +624,13 @@ class ScanSnapWebSDK {
    */
   #saveSessionToStorage(): void {
     if (!this.#sessionId) return;
-    
+
     try {
-      // Convert Map to Record for JSON serialization
       const scanFilesInfoObj: Record<string, FileInfo> = {};
       this.#scanFilesInfo.forEach((value, key) => {
         scanFilesInfoObj[key] = value;
       });
-      
+
       const sessionData: StoredSessionData = {
         port: this.#port,
         sessionId: this.#sessionId,
@@ -663,13 +638,13 @@ class ScanSnapWebSDK {
         state: { ...this.state },
         timestamp: Date.now()
       };
-      
+
       localStorage.setItem(SCANSNAP_SESSION_STORAGE_KEY, JSON.stringify(sessionData));
     } catch (error) {
       console.error('Failed to save ScanSnap session to local storage:', error);
     }
   }
-  
+
   /**
    * Restores session data from local storage if available.
    * @private
@@ -678,38 +653,33 @@ class ScanSnapWebSDK {
     try {
       const storedData = localStorage.getItem(SCANSNAP_SESSION_STORAGE_KEY);
       if (!storedData) return;
-      
+
       const sessionData: StoredSessionData = JSON.parse(storedData);
-      
-      // Check if the stored session is too old (e.g., older than 24 hours)
+
       const SESSION_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
       if (Date.now() - sessionData.timestamp > SESSION_MAX_AGE) {
         console.log('Stored session is too old, not restoring');
         localStorage.removeItem(SCANSNAP_SESSION_STORAGE_KEY);
         return;
       }
-      
-      // Restore session data
+
       this.#port = sessionData.port;
       this.#baseUrl = this.#getBaseUrl();
       this.#sessionId = sessionData.sessionId;
-      
-      // Restore scan files info
+
       this.#scanFilesInfo = new Map();
       Object.entries(sessionData.scanFilesInfo).forEach(([key, value]) => {
         this.#scanFilesInfo.set(key, value);
       });
-      
-      // Restore scanner state
+
       this.state = { ...sessionData.state };
 
     } catch (error) {
       console.error('Failed to restore ScanSnap session from local storage:', error);
-      // If restoration fails, clear the storage to prevent future errors
       localStorage.removeItem(SCANSNAP_SESSION_STORAGE_KEY);
     }
   }
-  
+
   /**
    * Clears the stored session data from local storage.
    */
@@ -725,7 +695,7 @@ class ScanSnapWebSDK {
   cleanup(preserveSession: boolean = true): void {
     if (this.#sessionId) {
       navigator.sendBeacon(`${this.#baseUrl}/api/scanner/disconnect/${this.#sessionId}`);
-      
+
       if (!preserveSession) {
         this.clearStoredSession();
         this.#sessionId = null;
@@ -737,7 +707,6 @@ class ScanSnapWebSDK {
 const scansnap = new ScanSnapWebSDK();
 window.addEventListener('pagehide', () => scansnap.cleanup());
 
-// Export constants for use in other modules
 export {
   CONTINUE_SCAN,
   CONTINUE_SCAN_RETURN_PATH,

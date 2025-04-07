@@ -1,12 +1,7 @@
-import { useEffect } from 'react'; // Removed useState
-import { format, parseISO, isValid } from 'date-fns'; // Import date-fns functions
+import { format, parseISO } from 'date-fns';
 import { AlertCircle, FileCheck, RefreshCw } from 'lucide-react';
-// import { useExams } from '../hooks'; // Removed useExams import
-import { trpc } from '../lib/trpc.js'; // Import trpc
-// import { ExamScore } from '../types/exam'; // Type will be inferred from tRPC
+import { trpc } from '../lib/trpc.js';
 
-// Define the expected structure for the score data explicitly
-// This should match the structure returned by the server's getScoresByNoteId procedure
 interface NoteExamScoreData {
   id: number; // Assuming score ID
   exam_id: number; // Assuming exam ID
@@ -29,35 +24,22 @@ interface MockExamScoresListProps {
 }
 
 /**
- * 特定のノートの模試点数を表示するコンポーネント (tRPC版)
+ * 特定のノートの模試点数を表示するコンポーネント
  */
 const MockExamScoresList = ({ noteId }: MockExamScoresListProps) => {
-  // Use tRPC query to fetch scores for the given noteId
-  const { data: noteExamScores = [], isLoading, error, refetch } = trpc.exam.getScoresByNoteId.useQuery(
+  // Removed 'error' from destructuring, it will be handled by GlobalErrorBoundary
+  const { data: noteExamScores = [], isLoading, refetch } = trpc.exam.getScoresByNoteId.useQuery(
     { noteId },
     {
-      // Only run the query if noteId is a positive number
       enabled: typeof noteId === 'number' && noteId > 0,
     }
   );
 
-  // useEffect for initial fetch is no longer needed as useQuery handles it based on 'enabled' option
-
-  // 日付をフォーマット (date-fns を使用)
+  // 日付をフォーマット
   const formatDate = (dateString: string) => {
-    try {
-      const date = parseISO(dateString); // Assume 'yyyy-MM-dd' format
-      if (!isValid(date)) {
-        return '無効な日付';
-      }
-      return format(date, 'yyyy年M月d日');
-    } catch (e) {
-      console.error("Error formatting date:", dateString, e);
-      return '日付エラー';
-    }
+    const date = parseISO(dateString);
+    return format(date, 'yyyy年M月d日');
   };
-
-  // No separate renderError function needed, handle inline
 
   return (
     <div className="mb-4">
@@ -74,22 +56,13 @@ const MockExamScoresList = ({ noteId }: MockExamScoresListProps) => {
         >
           <RefreshCw className={`w-3 h-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
           更新
-        </button>
-      </div>
+       </button>
+     </div>
 
-      {/* Display tRPC query error */}
-      {error && (
-         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 flex items-start">
-           <AlertCircle className="w-5 h-5 mr-2 mt-0.5" />
-           <div>
-             <p className="font-semibold">エラーが発生しました</p>
-             <p>{error.message}</p>
-           </div>
-         </div>
-      )}
+     {/* Removed local error display block */}
 
-      {isLoading ? (
-        <div className="text-center py-4 text-gray-500">
+     {isLoading ? (
+       <div className="text-center py-4 text-gray-500">
           <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-gray-500 mx-auto mb-2"></div>
           <p>模試データを読み込み中...</p>
         </div>
@@ -108,7 +81,7 @@ const MockExamScoresList = ({ noteId }: MockExamScoresListProps) => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {/* Map over the data returned by the tRPC query */}
-              {noteExamScores.map((score: NoteExamScoreData) => ( // Add explicit type annotation
+              {noteExamScores.map((score: NoteExamScoreData) => (
                 <tr key={score.id}>
                   {/* Access properties based on the joined data structure (ScoreWithExamDetails) */}
                   <td className="py-2 px-3 whitespace-nowrap">{score.exam_name}</td>

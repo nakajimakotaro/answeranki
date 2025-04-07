@@ -1,22 +1,17 @@
 import { z } from 'zod';
-import { TRPCError } from '@trpc/server';
 import { publicProcedure, router } from '../trpc.js';
-import prisma from '../db/prisma.js'; // Import Prisma Client
-import { Prisma } from '@prisma/client'; // Import Prisma types
+import prisma from '../db/prisma.js';
+import { Prisma } from '@prisma/client';
 import {
   StudyScheduleInputSchema,
   StudyScheduleUpdateSchema,
-  StudyScheduleSchema, // Expects string dates
+  StudyScheduleSchema,
   StudyLogInputSchema,
   StudyLogUpdateSchema,
-  StudyLogSchema, // Expects string dates
-  TimelineEventSchema, // Expects string dates
+  StudyLogSchema,
+  TimelineEventSchema,
 } from '@answeranki/shared/schemas/schedule';
-// date-fns is only needed for getYearlyLogs now
-import { startOfYear, endOfYear, format } from 'date-fns';
 
-// Helper function to format Prisma schedule result to match StudyScheduleSchema input structure
-// Prisma returns strings for date fields as defined in schema.prisma
 const formatPrismaScheduleForZod = (
     schedule: Prisma.study_schedulesGetPayload<{ include: { textbooks: { select: { title: true, subject: true } } } }>
 ): z.input<typeof StudyScheduleSchema> => {
@@ -34,13 +29,10 @@ const formatPrismaScheduleForZod = (
     created_at: schedule.created_at?.toISOString(),
     updated_at: schedule.updated_at?.toISOString(),
   };
-  // Remove undefined fields explicitly if Zod schema doesn't expect them
   Object.keys(formatted).forEach(key => (formatted as any)[key] === undefined && delete (formatted as any)[key]);
   return formatted;
 };
 
-// Helper function to format Prisma log result to match StudyLogSchema input structure
-// Prisma returns strings for date fields as defined in schema.prisma
 const formatPrismaLogForZod = (
     log: Prisma.study_logsGetPayload<{ include: { textbooks: { select: { title: true, subject: true } } } }>
 ): z.input<typeof StudyLogSchema> => {
@@ -56,41 +48,31 @@ const formatPrismaLogForZod = (
     created_at: log.created_at?.toISOString(),
     updated_at: log.updated_at?.toISOString(),
   };
-  // Remove undefined fields explicitly
   Object.keys(formatted).forEach(key => (formatted as any)[key] === undefined && delete (formatted as any)[key]);
   return formatted;
 };
 
 
 export const scheduleRouter = router({
-  // --- Study Schedule Procedures ---
   listSchedules: publicProcedure
     .output(z.array(StudyScheduleSchema))
     .query(async () => {
-      try {
-        const schedulesData = await prisma.study_schedules.findMany({
-          include: { textbooks: { select: { title: true, subject: true } } },
-          orderBy: { start_date: 'asc' }
-        });
-        const formattedSchedules = schedulesData.map(formatPrismaScheduleForZod);
-        return StudyScheduleSchema.array().parse(formattedSchedules);
-      } catch (error) {
-        console.error("Error listing schedules:", error);
-        if (error instanceof z.ZodError) console.error("Zod validation error (listSchedules):", error.errors);
-        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to list schedules' });
-      }
+      const schedulesData = await prisma.study_schedules.findMany({
+        include: { textbooks: { select: { title: true, subject: true } } },
+        orderBy: { start_date: 'asc' }
+      });
+      const formattedSchedules = schedulesData.map(formatPrismaScheduleForZod);
+      return StudyScheduleSchema.array().parse(formattedSchedules);
     }),
 
   createSchedule: publicProcedure
     .input(StudyScheduleInputSchema)
     .output(StudyScheduleSchema)
     .mutation(async ({ input }) => {
-      try {
-        // Prepare data for Prisma, dates are already strings
-        const dataToCreate: Prisma.study_schedulesCreateInput = {
-          textbooks: { connect: { id: input.textbook_id } },
-          start_date: input.start_date, // Pass string directly
-          end_date: input.end_date,     // Pass string directly
+      const dataToCreate: Prisma.study_schedulesCreateInput = {
+        textbooks: { connect: { id: input.textbook_id } },
+          start_date: input.start_date,
+          end_date: input.end_date,
           daily_goal: input.daily_goal,
           buffer_days: input.buffer_days,
           weekday_goals: input.weekday_goals,
@@ -99,85 +81,37 @@ export const scheduleRouter = router({
         const newScheduleData = await prisma.study_schedules.create({
           data: dataToCreate,
           include: { textbooks: { select: { title: true, subject: true } } }
-        });
-        const formattedSchedule = formatPrismaScheduleForZod(newScheduleData);
-        return StudyScheduleSchema.parse(formattedSchedule);
-      } catch (error: any) {
-        console.error("Error creating schedule:", error);
-         if (error instanceof z.ZodError) {
-             console.error("Zod validation error (createSchedule):", error.errors);
-             throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Data validation failed after creation.' });
-         }
-         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
-             // Error details might indicate which foreign key failed
-             throw new TRPCError({ code: 'NOT_FOUND', message: `Textbook with ID ${input.textbook_id} not found.` });
-         }
-         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-             // Should not happen on create, but handle defensively
-             throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Record creation failed unexpectedly.' });
-         }
-        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create schedule' });
-      }
+      });
+      const formattedSchedule = formatPrismaScheduleForZod(newScheduleData);
+      return StudyScheduleSchema.parse(formattedSchedule);
     }),
 
   updateSchedule: publicProcedure
     .input(StudyScheduleUpdateSchema)
     .output(StudyScheduleSchema)
     .mutation(async ({ input }) => {
-      const { id, textbook_id, ...updateData } = input; // Separate textbook_id
-      try {
-         // Prepare data for Prisma update, dates are already strings
-         const dataToUpdate: Prisma.study_schedulesUpdateInput = {
-            ...updateData, // Includes start_date, end_date as strings if present
-            // If textbook_id is provided in the input, use connect
+      const { id, textbook_id, ...updateData } = input;
+      const dataToUpdate: Prisma.study_schedulesUpdateInput = {
+          ...updateData,
             ...(textbook_id && { textbooks: { connect: { id: textbook_id } } }),
          };
-         // textbook_id is already excluded from updateData due to destructuring
 
         const updatedScheduleData = await prisma.study_schedules.update({
           where: { id },
           data: dataToUpdate,
            include: { textbooks: { select: { title: true, subject: true } } }
-        });
-        const formattedSchedule = formatPrismaScheduleForZod(updatedScheduleData);
-        return StudyScheduleSchema.parse(formattedSchedule);
-      } catch (error: any) {
-        console.error("Error updating schedule:", error);
-         if (error instanceof z.ZodError) {
-             console.error("Zod validation error (updateSchedule):", error.errors);
-             throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Data validation failed after update.' });
-         }
-        if (error instanceof Prisma.PrismaClientKnownRequestError) {
-            if (error.code === 'P2025') {
-                throw new TRPCError({ code: 'NOT_FOUND', message: `Schedule with ID ${id} not found.` });
-            }
-             const textbookId = 'textbook_id' in updateData ? updateData.textbook_id : undefined;
-             if (error.code === 'P2003' && textbookId !== undefined) {
-                 throw new TRPCError({ code: 'NOT_FOUND', message: `Textbook with ID ${textbookId} not found.` });
-            }
-        }
-        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to update schedule' });
-      }
+      });
+      const formattedSchedule = formatPrismaScheduleForZod(updatedScheduleData);
+      return StudyScheduleSchema.parse(formattedSchedule);
     }),
 
   deleteSchedule: publicProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {
-       try {
-        await prisma.study_schedules.delete({
-          where: { id: input.id },
-        });
-        return { success: true, message: 'Schedule deleted successfully' };
-      } catch (error: any) {
-         console.error("Error deleting schedule:", error);
-         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-            throw new TRPCError({ code: 'NOT_FOUND', message: `Schedule with ID ${input.id} not found.` });
-         }
-          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
-             throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete schedule ${input.id} as it has related records (e.g., logs).` });
-          }
-         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to delete schedule' });
-      }
+      await prisma.study_schedules.delete({
+        where: { id: input.id },
+      });
+      return { success: true, message: 'Schedule deleted successfully' };
     }),
 
   // --- Study Log Procedures ---
@@ -189,10 +123,8 @@ export const scheduleRouter = router({
     }).optional())
     .output(z.array(StudyLogSchema))
     .query(async ({ input }) => {
-        try {
-            const where: Prisma.study_logsWhereInput = {};
-            // Prisma handles string date comparisons correctly
-            if (input?.start_date || input?.end_date) {
+      const where: Prisma.study_logsWhereInput = {};
+      if (input?.start_date || input?.end_date) {
                 where.date = {};
                 if (input.start_date) where.date.gte = input.start_date;
                 if (input.end_date) where.date.lte = input.end_date;
@@ -203,24 +135,18 @@ export const scheduleRouter = router({
                 where: where,
                 include: { textbooks: { select: { title: true, subject: true } } },
                 orderBy: { date: 'desc' }
-            });
-            const formattedLogs = logsData.map(formatPrismaLogForZod);
-            return StudyLogSchema.array().parse(formattedLogs);
-        } catch (error) {
-             console.error("Error listing logs:", error);
-             if (error instanceof z.ZodError) console.error("Zod validation error (listLogs):", error.errors);
-             throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to list logs' });
-        }
+      });
+      const formattedLogs = logsData.map(formatPrismaLogForZod);
+      // Zod parse errors will propagate.
+      return StudyLogSchema.array().parse(formattedLogs);
     }),
 
   createLog: publicProcedure
     .input(StudyLogInputSchema)
     .output(StudyLogSchema)
     .mutation(async ({ input }) => {
-        try {
-             // Prepare data for Prisma, date is already a string
-             const dataToCreate: Prisma.study_logsCreateInput = {
-                date: input.date, // Pass string directly
+      const dataToCreate: Prisma.study_logsCreateInput = {
+          date: input.date, // Pass string directly
                 textbooks: { connect: { id: input.textbook_id } },
                 planned_amount: input.planned_amount,
                 actual_amount: input.actual_amount,
@@ -229,86 +155,37 @@ export const scheduleRouter = router({
             const newLogData = await prisma.study_logs.create({
                 data: dataToCreate,
                  include: { textbooks: { select: { title: true, subject: true } } }
-            });
-            const formattedLog = formatPrismaLogForZod(newLogData);
-            return StudyLogSchema.parse(formattedLog);
-        } catch (error: any) {
-            console.error("Error creating log:", error);
-             if (error instanceof z.ZodError) {
-                 console.error("Zod validation error (createLog):", error.errors);
-                 throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Data validation failed after creation.' });
-             }
-            if (error instanceof Prisma.PrismaClientKnownRequestError) {
-                 if (error.code === 'P2002') { // Unique constraint (likely date+textbook_id if defined)
-                     throw new TRPCError({ code: 'CONFLICT', message: 'A log already exists for this date and textbook' });
-                 }
-                 if (error.code === 'P2003') {
-                     throw new TRPCError({ code: 'NOT_FOUND', message: `Textbook with ID ${input.textbook_id} not found.` });
-                 }
-            }
-            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create log' });
-        }
+      });
+      const formattedLog = formatPrismaLogForZod(newLogData);
+      return StudyLogSchema.parse(formattedLog);
     }),
 
   updateLog: publicProcedure
     .input(StudyLogUpdateSchema)
     .output(StudyLogSchema)
     .mutation(async ({ input }) => {
-        const { id, textbook_id, ...updateData } = input; // Separate textbook_id
-        try {
-            // Prepare data for Prisma update, date is already a string
-            const dataToUpdate: Prisma.study_logsUpdateInput = {
-                ...updateData, // Includes date as string if present
-                 // If textbook_id is provided in the input, use connect
+      const { id, textbook_id, ...updateData } = input;
+      const dataToUpdate: Prisma.study_logsUpdateInput = {
+          ...updateData,
                 ...(textbook_id && { textbooks: { connect: { id: textbook_id } } }),
             };
-            // textbook_id is already excluded from updateData
 
             const updatedLogData = await prisma.study_logs.update({
                 where: { id },
                 data: dataToUpdate,
                  include: { textbooks: { select: { title: true, subject: true } } }
-            });
-            const formattedLog = formatPrismaLogForZod(updatedLogData);
-            return StudyLogSchema.parse(formattedLog);
-        } catch (error: any) {
-            console.error("Error updating log:", error);
-             if (error instanceof z.ZodError) {
-                 console.error("Zod validation error (updateLog):", error.errors);
-                 throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Data validation failed after update.' });
-             }
-             if (error instanceof Prisma.PrismaClientKnownRequestError) {
-                if (error.code === 'P2025') {
-                    throw new TRPCError({ code: 'NOT_FOUND', message: `Log with ID ${id} not found.` });
-                }
-                 if (error.code === 'P2002') { // Unique constraint (date+textbook_id)
-                     throw new TRPCError({ code: 'CONFLICT', message: 'Another log already exists for this date and textbook' });
-                 }
-                 const textbookId = 'textbook_id' in updateData ? updateData.textbook_id : undefined;
-                 if (error.code === 'P2003' && textbookId !== undefined) {
-                     throw new TRPCError({ code: 'NOT_FOUND', message: `Textbook with ID ${textbookId} not found.` });
-                 }
-            }
-            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to update log' });
-        }
+      });
+      const formattedLog = formatPrismaLogForZod(updatedLogData);
+      return StudyLogSchema.parse(formattedLog);
     }),
 
   deleteLog: publicProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {
-        try {
-            await prisma.study_logs.delete({
-                where: { id: input.id },
-            });
-            return { success: true, message: 'Log deleted successfully' };
-        } catch (error: any) {
-            console.error("Error deleting log:", error);
-            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-                throw new TRPCError({ code: 'NOT_FOUND', message: `Log with ID ${input.id} not found.` });
-            }
-            // Handle P2003 if needed
-            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to delete log' });
-        }
+      await prisma.study_logs.delete({
+          where: { id: input.id },
+      });
+      return { success: true, message: 'Log deleted successfully' };
     }),
 
   // --- Timeline Events Procedure ---
@@ -319,15 +196,12 @@ export const scheduleRouter = router({
     }).optional())
     .output(z.array(TimelineEventSchema))
     .query(async ({ input }) => {
-        const events: z.input<typeof TimelineEventSchema>[] = [];
-        // Use strings directly for Prisma comparison
-        const startDate = input?.startDate;
-        const endDate = input?.endDate;
+      const events: z.input<typeof TimelineEventSchema>[] = [];
+      const startDate = input?.startDate;
+      const endDate = input?.endDate;
 
-        try {
-            // Fetch schedules
-            const scheduleWhere: Prisma.study_schedulesWhereInput = {};
-            // Prisma handles string date comparisons
+      // Fetch schedules
+      const scheduleWhere: Prisma.study_schedulesWhereInput = {};
             if (startDate) scheduleWhere.end_date = { gte: startDate };
             if (endDate) scheduleWhere.start_date = { lte: endDate };
             const schedulesData = await prisma.study_schedules.findMany({
@@ -343,13 +217,12 @@ export const scheduleRouter = router({
                     title: `${formattedSchedule.textbook_subject || 'N/A'}: ${formattedSchedule.textbook_title || 'N/A'}`,
                     startDate: formattedSchedule.start_date,
                     endDate: formattedSchedule.end_date,
-                    details: formattedSchedule // Pass the object formatted for the shared schema
+                    details: formattedSchedule
                 });
             });
 
             // Fetch exams
             const examWhere: Prisma.examsWhereInput = {};
-            // Prisma handles string date comparisons
             if (startDate || endDate) {
                 examWhere.date = {};
                 if (startDate) examWhere.date.gte = startDate;
@@ -359,16 +232,14 @@ export const scheduleRouter = router({
                 where: examWhere,
                 include: {
                     universities: { select: { name: true } },
-                    // Include related scores if needed by TimelineEventSchema.details
-                    exam_scores: true, // Example: include scores
-                    subject_scores: true // Example: include subject scores
+                    exam_scores: true,
+                    subject_scores: true
                  },
                 orderBy: { date: 'asc' },
             });
             examsData.forEach(e => {
-                const formattedDate = e.date; // Already a string
-                // Explicitly construct the details object based on TimelineEventSchema expectations
-                const examDetails: any = { // Use 'any' for flexibility or define a specific interface
+                const formattedDate = e.date;
+                const examDetails: any = {
                     id: e.id,
                     name: e.name,
                     date: formattedDate,
@@ -379,8 +250,6 @@ export const scheduleRouter = router({
                     university_name: e.universities?.name ?? undefined,
                     created_at: e.created_at?.toISOString(),
                     updated_at: e.updated_at?.toISOString(),
-                    // Add score details if expected by the schema
-                    // Example: Map exam_scores and subject_scores if needed
                     exam_scores: e.exam_scores.map(es => ({
                         ...es,
                         created_at: es.created_at?.toISOString(),
@@ -392,7 +261,6 @@ export const scheduleRouter = router({
                         updated_at: ss.updated_at?.toISOString(),
                     })),
                 };
-                 // Remove undefined fields from details
                 Object.keys(examDetails).forEach(key => examDetails[key] === undefined && delete examDetails[key]);
 
                 events.push({
@@ -401,16 +269,13 @@ export const scheduleRouter = router({
                     title: e.is_mock ? e.name : (e.universities?.name ? `${e.universities.name} ${e.name}` : e.name),
                     startDate: formattedDate,
                     endDate: formattedDate,
-                    details: examDetails // Pass the constructed details object
+                    details: examDetails
                 });
             });
 
-            // Sort events by start date (string comparison)
             events.sort((a, b) => {
                 if (a.startDate < b.startDate) return -1;
                 if (a.startDate > b.startDate) return 1;
-                // Optional: secondary sort if start dates are equal
-                // Handle potential undefined endDate
                 const endDateA = a.endDate ?? '';
                 const endDateB = b.endDate ?? '';
                 if (endDateA < endDateB) return -1;
@@ -418,16 +283,7 @@ export const scheduleRouter = router({
                 return 0;
             });
 
-            // Validate the final events array against the TimelineEventSchema
-            return TimelineEventSchema.array().parse(events);
-
-        } catch (error) {
-            console.error("Error fetching timeline events:", error);
-             if (error instanceof z.ZodError) {
-                 console.error("Zod validation error (getTimelineEvents):", error.errors);
-             }
-            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to fetch timeline events' });
-        }
+      return TimelineEventSchema.array().parse(events);
     }),
 
   // --- Yearly Logs Procedure ---
@@ -436,37 +292,24 @@ export const scheduleRouter = router({
     .output(z.record(z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.number()))
     .query(async ({ input }) => {
       const { year } = input;
-      // Use string representation for Prisma query
       const yearStartDateStr = `${year}-01-01`;
       const yearEndDateStr = `${year}-12-31`;
 
-      try {
-        const dailyLogs = await prisma.study_logs.groupBy({
-          by: ['date'],
-          where: {
-            // Prisma handles string date comparisons
+      const dailyLogs = await prisma.study_logs.groupBy({
+        by: ['date'],
+        where: {
             date: { gte: yearStartDateStr, lte: yearEndDateStr },
           },
           _sum: { actual_amount: true },
           orderBy: { date: 'asc' },
         });
 
-        // date from groupBy is already a string 'yyyy-MM-dd'
         const yearlyData = dailyLogs.reduce((acc, dayLog) => {
-          // No need to format dayLog.date, it's already the string key we need
           acc[dayLog.date] = dayLog._sum?.actual_amount ?? 0;
           return acc;
         }, {} as Record<string, number>);
 
         return yearlyData;
-
-      } catch (error: any) {
-        console.error(`Error fetching yearly logs for ${year}:`, error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `Failed to fetch yearly logs: ${error.message || 'Unknown error'}`,
-        });
-      }
     }),
 });
 

@@ -5,10 +5,6 @@ import { Calendar, Filter, BarChart2 } from 'lucide-react'; // Removed BookOpen 
 
 interface YearlyActivityCalendarProps {
   year?: number;
-  // Filter props kept for potential future re-implementation, but functionality removed
-  // initialFilterType?: 'all' | 'textbook' | 'subject';
-  // initialFilterId?: number;
-  // initialFilterSubject?: string;
 }
 
 /**
@@ -125,9 +121,6 @@ const YearlyActivityCalendar = ({
   // 曜日の名前
   const dayOfWeekNames = ['日', '月', '火', '水', '木', '金', '土'];
 
-  // Filter logic removed as the endpoint doesn't support it currently
-  // const handleFilterTypeChange = ...
-
   if (isLoading) { // Use isLoading from useQuery
     return (
       <div className="flex justify-center items-center h-64">
@@ -135,9 +128,6 @@ const YearlyActivityCalendar = ({
       </div>
     );
   }
-
-  // Error handling is removed based on user feedback and .clinerules
-  // Errors will be logged to the console by react-query default behavior
 
   // Render calendar only if data is available
   if (!yearlyLogAmounts) {
@@ -178,8 +168,6 @@ const YearlyActivityCalendar = ({
           </button>
         </div>
       </div>
-
-      {/* Filter UI removed */}
 
       {/* カレンダー表示 */}
       <div className="relative mt-6"> {/* Added margin top */}

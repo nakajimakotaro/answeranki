@@ -32,9 +32,6 @@ export function useNotes() {
       const notesInfo = await ankiConnectService.getNotesInfo(noteIds);
       setNotes(notesInfo);
       return notesInfo;
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('ノートの取得に失敗しました'));
-      return [];
     } finally {
       setIsLoading(false);
     }
@@ -57,9 +54,6 @@ export function useNotes() {
       }
       
       return notesInfo[0];
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('ノートの取得に失敗しました'));
-      return null;
     } finally {
       setIsLoading(false);
     }
@@ -97,9 +91,6 @@ export function useNotes() {
       }
       
       return success;
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('ノートの更新に失敗しました'));
-      return false;
     } finally {
       setIsLoading(false);
     }
@@ -189,9 +180,6 @@ export function useNotes() {
       }
       
       return success;
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('解答の追加に失敗しました'));
-      return false;
     } finally {
       setIsLoading(false);
     }
@@ -227,12 +215,7 @@ export function useNotes() {
         }
       }
       
-      // ノート情報が取得できなかった場合は、カード情報のみを返す
       return currentCard;
-    } catch (err) {
-      console.error('Failed to get card or note info:', err);
-      setError(err instanceof Error ? err : new Error('現在のカード情報の取得に失敗しました'));
-      return null;
     } finally {
       setIsLoading(false);
     }

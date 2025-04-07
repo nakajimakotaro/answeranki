@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { format, parse, parseISO, compareAsc, isValid } from 'date-fns';
+import { format, parse, parseISO, compareAsc } from 'date-fns';
 import {
   Plus,
   Edit,
@@ -194,15 +194,10 @@ const ExamsPage = () => {
   };
 
   // 日付をフォーマット
+  // Assume dateString from DB is a valid 'yyyy-MM-dd' string
   const formatDate = (dateString: string) => {
-     try {
-       const date = parse(dateString, 'yyyy-MM-dd', new Date());
-       if (!isValid(date)) return '無効な日付';
-       return format(date, 'yyyy年M月d日');
-     } catch (e) {
-       console.error("Error formatting date:", dateString, e);
-       return '日付エラー';
-     }
+     const date = parse(dateString, 'yyyy-MM-dd', new Date());
+     return format(date, 'yyyy年M月d日');
   };
 
   // エラーメッセージを表示 (Handles both query and mutation errors)
@@ -394,16 +389,9 @@ const ExamsPage = () => {
         ) : (
           // Sort exams by date, ascending (oldest first) using date-fns
           [...(examsQuery.data || [])].sort((a, b) => {
-              try {
-                  // Ensure dates are valid before parsing
-                  const dateA = parse(a.date, 'yyyy-MM-dd', new Date());
-                  const dateB = parse(b.date, 'yyyy-MM-dd', new Date());
-                  if (!isValid(dateA) || !isValid(dateB)) return 0; // Keep order if dates invalid
-                  return compareAsc(dateA, dateB);
-              } catch (e) {
-                  console.error("Error parsing dates for sorting:", a.date, b.date, e);
-                  return 0; // Keep order on error
-              }
+              const dateA = parse(a.date, 'yyyy-MM-dd', new Date());
+              const dateB = parse(b.date, 'yyyy-MM-dd', new Date());
+              return compareAsc(dateA, dateB);
           }).map((exam) => (
             <div key={exam.id} className="card border rounded-lg shadow-sm overflow-hidden">
               {/* 試験ヘッダー */}

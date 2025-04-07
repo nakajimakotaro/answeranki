@@ -10,8 +10,8 @@ const STORAGE_KEY = {
 };
 
 const Settings = () => {
-  // Removed updateConfig from hook destructuring
-  const { isConnected, isLoading: isConnecting, error: connectionErrorHook, version, testConnection } = useAnkiConnect();
+  // Removed updateConfig and version from hook destructuring
+  const { isConnected, isLoading: isConnecting, error: connectionErrorHook, testConnection } = useAnkiConnect();
 
   const [ankiConnectUrl, setAnkiConnectUrl] = useState('http://localhost:8765');
   const [textbookTags, setTextbookTags] = useState<string[]>([]);
@@ -31,13 +31,10 @@ const Settings = () => {
       setAnkiConnectUrl(savedUrl);
     }
     
+    // Assume savedTextbookTags from localStorage is valid JSON or null
     if (savedTextbookTags) {
-      try {
-        setTextbookTags(JSON.parse(savedTextbookTags));
-      } catch (e) {
-        console.error('参考書タグの読み込みに失敗しました:', e);
-        setTextbookTags([]);
-      }
+      setTextbookTags(JSON.parse(savedTextbookTags));
+      // If parsing fails, an error will naturally occur and bubble up
     }
   }, []);
 
@@ -83,7 +80,9 @@ const Settings = () => {
     setConnectionStatus(null);
     setConnectionMessage('');
 
-    try {
+    // Assume testConnection handles its own errors internally or propagates them
+    // The hook's state (isConnected, connectionErrorHook) should reflect the result
+    try { // Keep outer try-finally for setTestingConnection(false)
       // updateConfig call removed
 
       // Use the testConnection function from the hook
@@ -99,19 +98,16 @@ const Settings = () => {
       // For now, just display the message based on the result of testConnection call
       if (connected) {
           setConnectionStatus('success');
-          // Use version from hook if available
-          setConnectionMessage(`AnkiConnectとの接続に成功しました。(Version: ${version ?? 'N/A'})`);
+          // Version is not available from the hook
+          setConnectionMessage(`AnkiConnectとの接続に成功しました。`);
       } else {
           setConnectionStatus('error');
           // Use error message from hook if available
           setConnectionMessage(connectionErrorHook || 'AnkiConnectとの接続に失敗しました。URLを確認し、Ankiが起動しているか確認してください。');
       }
-
-    } catch (error) { // Catch potential errors from testConnection itself (though hook handles internally)
-      setConnectionStatus('error');
-      setConnectionMessage(error instanceof Error ? error.message : '接続テスト中に予期せぬエラーが発生しました');
+    // Removed catch block for testConnection errors, relying on hook's error state
     } finally {
-      setTestingConnection(false);
+       setTestingConnection(false);
     }
   };
 
