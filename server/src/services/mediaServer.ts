@@ -1,13 +1,10 @@
 import express from 'express';
 import { Express } from 'express';
 
-// Media cache to store retrieved files - Exported for sharing
 export let mediaCache: Record<string, string> = {};
 
-// Function to clear the cache - Exported for use by mediaRouter
 export const clearMediaCache = (): void => {
   mediaCache = {};
-  console.log('Media cache cleared (from mediaServer module)');
 };
 
 /**
@@ -39,7 +36,6 @@ const getContentTypeFromFilename = (filename: string): string => {
  * Set up media routes on the main Express app
  */
 export const setupMediaRoutes = (app: Express): void => {
-  // Media server route
   app.get('/media/:filename', async (req, res) => {
     const filename = req.params.filename;
     
@@ -49,19 +45,16 @@ export const setupMediaRoutes = (app: Express): void => {
     }
     
     try {
-      // Check if file is in cache
       if (mediaCache[filename]) {
         const buffer = Buffer.from(mediaCache[filename], 'base64');
         
-        // Set content type and cache headers
         const contentType = getContentTypeFromFilename(filename);
         res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hour cache
+        res.setHeader('Cache-Control', 'public, max-age=86400');
         res.status(200).send(buffer);
         return;
       }
       
-      // Retrieve from AnkiConnect
       const response = await fetch('http://localhost:8765', {
         method: 'POST',
         headers: {
@@ -84,17 +77,14 @@ export const setupMediaRoutes = (app: Express): void => {
         return;
       }
       
-      // Convert base64 to buffer
       const base64Data = data.result;
       const buffer = Buffer.from(base64Data, 'base64');
       
-      // Cache the file
       mediaCache[filename] = base64Data;
       
-      // Set content type and cache headers
       const contentType = getContentTypeFromFilename(filename);
       res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hour cache
+      res.setHeader('Cache-Control', 'public, max-age=86400');
       res.status(200).send(buffer);
     } catch (error) {
       console.error('Error retrieving media file:', error);
@@ -102,6 +92,4 @@ export const setupMediaRoutes = (app: Express): void => {
     }
   });
 
-  // Removed the old /api/clear-cache Express route.
-  // This functionality is now handled by the mediaRouter tRPC mutation.
 };

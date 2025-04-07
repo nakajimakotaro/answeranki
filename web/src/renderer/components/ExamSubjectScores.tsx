@@ -44,23 +44,21 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
       utils.exam.getSubjectScoresByExamId.invalidate({ examId }); // Changed getSubjectScores to getSubjectScoresByExamId
       setEditMode(false);
       setError(null); // Clear errors
-     },
-     onError: (err) => {
-       setError(new Error(err.message)); // Extract message and create a new Error object
-       console.error(`Error saving subject scores for exam ${examId}:`, err);
-     }
-  });
+      },
+      onError: (err) => {
+        setError(new Error(err.message)); // Extract message and create a new Error object
+      },
+    });
   // Mutation for deleting a score
   const deleteScoreMutation = trpc.exam.deleteSubjectScore.useMutation({
      onSuccess: () => {
       utils.exam.getSubjectScoresByExamId.invalidate({ examId }); // Changed getSubjectScores to getSubjectScoresByExamId
       setError(null); // Clear errors
-     },
-      onError: (err) => {
-       setError(new Error(err.message)); // Extract message and create a new Error object
-       console.error(`Error deleting subject score for exam ${examId}:`, err);
-     }
-  });
+      },
+       onError: (err) => {
+        setError(new Error(err.message)); // Extract message and create a new Error object
+       },
+     });
 
   // Local state
   const [error, setError] = useState<Error | null>(null); // For mutation errors

@@ -145,13 +145,12 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
         await createLogMutation.mutateAsync(logInputData);
          // Success/reset handled by onSuccess callback
       }
-    } catch (err) {
-      // Error is handled by the onError callback in useMutation hooks
-      // This catch block might not be strictly necessary unless mutateAsync throws differently
-      console.error("Mutation initiation failed:", err);
-       if (!error) { // Set a generic error if onError didn't set one
-           setError('ログの保存/更新リクエストに失敗しました。');
-       }
+     } catch (err) {
+       // Error is handled by the onError callback in useMutation hooks
+       // This catch block might not be strictly necessary unless mutateAsync throws differently
+        if (!error) { // Set a generic error if onError didn't set one
+            setError('ログの保存/更新リクエストに失敗しました。');
+        }
     }
   };
 

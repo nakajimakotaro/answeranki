@@ -1,30 +1,18 @@
 import { z } from 'zod';
-import { publicProcedure, router } from '../trpc.js'; // Revert back to .js extension
-// import fetch from 'node-fetch'; // Keep commented out for now
+import { publicProcedure, router } from '../trpc.js';
 import { TRPCError } from '@trpc/server';
 
-// AnkiConnect configuration
 const ANKI_CONNECT_URL = 'http://localhost:8765';
 const ANKI_CONNECT_VERSION = 6;
 
-// Define input schema for the proxy action
 const ankiProxyInputSchema = z.object({
   action: z.string(),
-  params: z.record(z.unknown()).optional().default({}), // Allow any parameters
+  params: z.record(z.unknown()).optional().default({}),
 });
 
-// Define input schema for specific actions if needed (example)
-// const notesInfoInputSchema = z.object({
-//   notes: z.array(z.number()),
-// });
-
 export const ankiRouter = router({
-  /**
-   * Proxy requests to AnkiConnect.
-   */
   proxy: publicProcedure
     .input(ankiProxyInputSchema)
-    // Explicitly type 'input' using z.infer
     .mutation(async ({ input }: { input: z.infer<typeof ankiProxyInputSchema> }) => {
       try {
         const ankiRequest = {
@@ -60,10 +48,9 @@ export const ankiRouter = router({
         }
 
         const data = await response.json();
-        return data; // Return the raw JSON response from AnkiConnect
+        return data;
 
       } catch (error) {
-        console.error('AnkiConnect proxy tRPC error:', error);
         if (error instanceof TRPCError) {
           throw error;
         }
@@ -84,12 +71,8 @@ export const ankiRouter = router({
       }
     }),
 
-  /**
-   * Test connection to AnkiConnect.
-   */
   testConnection: publicProcedure.query(async () => {
     try {
-      // Use built-in fetch
       const response = await fetch(ANKI_CONNECT_URL, {
         method: 'POST',
         headers: {
@@ -121,7 +104,6 @@ export const ankiRouter = router({
         error: isConnected ? null : `AnkiConnect version mismatch or invalid response. Expected ${ANKI_CONNECT_VERSION}, got ${data.result ?? 'N/A'}`,
       };
     } catch (error) {
-      console.error('AnkiConnect connection test tRPC error:', error);
        const message = error instanceof Error ? error.message : String(error);
        let errorMessage = 'Failed to connect to AnkiConnect.';
        if (message.includes('ECONNREFUSED')) {
@@ -134,11 +116,9 @@ export const ankiRouter = router({
         connected: false,
         error: errorMessage,
         version: null,
-        // details: error instanceof Error ? error.message : String(error), // Avoid leaking detailed errors
       };
     }
   }),
 });
 
-// Export type definition of router for client-side use
 export type AnkiRouter = typeof ankiRouter;

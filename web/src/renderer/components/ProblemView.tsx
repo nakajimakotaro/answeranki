@@ -481,7 +481,6 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
       }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : '保存に失敗しました');
-      console.error(err);
     } finally {
       setSaving(false);
     }

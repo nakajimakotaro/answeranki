@@ -581,9 +581,7 @@ class ScanSnapWebSDK {
       body: JSON.stringify(this.state)
     });
 
-    console.log("Scan request response:", response);
     const result: ScanResult = await response.json();
-    console.log("Scan result:", result);
     if (!result?.data?.length) throw new Error("Invalid scan data");
 
     const fileIds: string[] = result.data
@@ -667,7 +665,6 @@ class ScanSnapWebSDK {
       };
       
       localStorage.setItem(SCANSNAP_SESSION_STORAGE_KEY, JSON.stringify(sessionData));
-      console.log('ScanSnap session saved to local storage');
     } catch (error) {
       console.error('Failed to save ScanSnap session to local storage:', error);
     }
@@ -705,8 +702,7 @@ class ScanSnapWebSDK {
       
       // Restore scanner state
       this.state = { ...sessionData.state };
-      
-      console.log('ScanSnap session restored from local storage');
+
     } catch (error) {
       console.error('Failed to restore ScanSnap session from local storage:', error);
       // If restoration fails, clear the storage to prevent future errors
@@ -719,7 +715,6 @@ class ScanSnapWebSDK {
    */
   clearStoredSession(): void {
     localStorage.removeItem(SCANSNAP_SESSION_STORAGE_KEY);
-    console.log('ScanSnap stored session cleared');
   }
 
   /**

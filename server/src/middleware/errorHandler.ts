@@ -36,7 +36,6 @@ export class ConflictError extends HttpError {
 // エラーハンドリングミドルウェア
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('Error occurred:', err); // Log the error for debugging
 
   let statusCode = 500;
   let errorMessage = 'Internal Server Error';

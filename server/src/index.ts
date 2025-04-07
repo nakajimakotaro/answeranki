@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
-console.log(__filename);
 const envPath = path.resolve(path.dirname(__filename), '../../.env');
 console.log('Loading environment variables from:', envPath);
 dotenv.config({ path: envPath });
@@ -25,8 +24,6 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Set up API routes
-// setupAnkiConnectProxy(app); // Removed old proxy setup
-// setupImageProcessing(app); // Removed old image processing setup
 setupMediaRoutes(app); // Add media routes to the main server
 
 // Add tRPC endpoint

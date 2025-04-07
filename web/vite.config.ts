@@ -12,29 +12,26 @@ export default defineConfig({
     alias: {
       // Alias '@' should now resolve relative to the 'web' directory
       '@': path.resolve(__dirname, './src'),
-      // Keep aliases for other workspaces if needed, relative to the root
-      // These might not be strictly necessary if tsconfig-paths handles them
-      // '@server': path.resolve(__dirname, '../server/src'),
-      // '@shared': path.resolve(__dirname, '../shared'),
     },
   },
-  server: {
+  server: { // Move proxy under server
     proxy: {
       // Proxy API requests to the Node.js server during development
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3000', // Your Node.js server address
         changeOrigin: true,
+        // rewrite: (path) => path.replace(/^\/api/, ''), // Optional: remove /api prefix
       },
       // Proxy media server requests
       '/media': {
-        target: 'http://localhost:3000', // Point to the main server where media routes are handled
+        target: 'http://localhost:3000', // Media server address (same as API server)
         changeOrigin: true,
       },
       // Proxy tRPC requests
       '/trpc': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3000', // tRPC server address (same as API server)
         changeOrigin: true,
       },
-    }
-  }
-})
+    },
+  },
+});

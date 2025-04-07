@@ -350,7 +350,7 @@ const TextbooksPage = () => {
         title,
         subject,
         total_problems: totalProblems,
-        // anki_deck_name is initially null/undefined
+        anki_deck_name: null, // Explicitly set to null if not provided
       });
     }
     // onSuccess/onError handlers in mutations handle UI updates

@@ -1,8 +1,4 @@
 import { useState, useCallback } from 'react';
-// Removed AnkiConnectService import as we use trpc client directly
-// import AnkiConnectService from '../services/ankiConnectService';
-// Removed AnkiConnectConfig import as updateConfig is removed
-// import { AnkiConnectConfig } from '../types/ankiConnect';
 import { rawTrpcClient } from '../lib/trpc'; // Import the raw tRPC client instance
 
 /**
@@ -43,14 +39,10 @@ export function useAnkiConnect() {
     }
   }, []);
 
-  // updateConfig function removed as it's not applicable with tRPC client approach
-
   return {
     isConnected,
     isLoading,
-    error, // Error message string or null
-    version, // AnkiConnect version if connected
+    error,
     testConnection,
-    // Removed updateConfig and ankiConnectService from return
   };
-}
+};
