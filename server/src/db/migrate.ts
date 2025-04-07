@@ -1,10 +1,10 @@
-import { getDb, initDatabase } from './database.js';
+import { getDbPool, initDatabase } from './database.js'; // Changed to getDbPool
 
 /**
  * Run database migrations (Currently does nothing as tables are created in initDatabase)
  */
 export const runMigrations = async (): Promise<void> => {
-  // const db = getDb(); // No longer needed here as createTables handles it
+  // const pool = getDbPool(); // Changed to getDbPool, but still commented out
   try {
     console.log('[Migration] Skipping migrations as tables are created during initialization.');
     // Migration logic has been removed as requested for the development environment.

@@ -83,8 +83,6 @@ npm run server:build
 npm start
 ```
 
-3. ブラウザで http://localhost:3000 にアクセス
-
 ## 設定
 
 - Ankiは起動し、AnkiConnectプラグインが有効になっている必要があります

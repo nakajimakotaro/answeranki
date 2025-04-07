@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    /* Base Options */
+    "target": "ES2022", // Use the latest stable ECMAScript version
+    "module": "NodeNext", // Use Node.js's native ESM support
+    "moduleResolution": "NodeNext", // Align module resolution with Node.js ESM
+    "strict": true, // Enable all strict type-checking options
+    "esModuleInterop": true, // Emit __importStar and __importDefault helpers for compatibility
+    "skipLibCheck": true, // Skip type checking of declaration files
+    "forceConsistentCasingInFileNames": true, // Disallow inconsistently-cased references to the same file
+    "resolveJsonModule": true, // Allow importing JSON files
+    "sourceMap": true, // Generate corresponding '.map' files
+    "composite": true, // Enable constraints that allow a TypeScript project to be used with project references
+    "declaration": true, // Generate corresponding '.d.ts' files
+    "declarationMap": true, // Generate sourcemaps for d.ts files
+
+    /* Path Aliases - Define relative to the root */
+    "baseUrl": ".", // Base directory for path resolution
+    "paths": {
+      "@server/*": ["server/src/*"],
+      "@answeranki/shared/*": ["shared/*"], // Corrected: points to shared/
+      "@shared/*": ["shared/*"]           // Corrected: points to shared/
+    }
+  },
+  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts"] // Exclude common folders and test files
+}

@@ -1,58 +1,52 @@
-import express from 'express';
-import cors from 'cors';
+import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+console.log(__filename);
+const envPath = path.resolve(path.dirname(__filename), '../../.env');
+console.log('Loading environment variables from:', envPath);
+dotenv.config({ path: envPath });
+
+import express, { Request, Response } from 'express';
 import { setupMediaRoutes } from './services/mediaServer.js';
-import { setupAnkiConnectProxy } from './services/ankiConnectProxy.js';
-import { setupImageProcessing } from './services/imageProcessing.js';
 import { initDatabase } from './db/database.js';
 import { runMigrations } from './db/migrate.js';
-import scheduleApiRouter from './routes/scheduleApi.js';
-import examApiRouter from './routes/examApi.js'; // Import the new exam router
-import { errorHandler } from './middleware/errorHandler.js'; // Import the error handler
-
-// ES modules compatibility
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import * as trpcExpress from '@trpc/server/adapters/express';
+import { appRouter } from './router.js';
+import { errorHandler } from './middleware/errorHandler.js';
 
 // Configuration
 const PORT = process.env.PORT || 3000;
-const CLIENT_BUILD_PATH = path.join(__dirname, '../../dist');
 
 // Create Express app
 const app = express();
 
 // Middleware
-app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Initialize database and run migrations
 initDatabase()
   .then(() => runMigrations())
-  .catch(err => {
+  .catch((err: Error) => { // Added type annotation for err
     console.error('Failed to initialize database or run migrations:', err);
     process.exit(1);
   });
 
-// Serve static files from the React app
-app.use(express.static(CLIENT_BUILD_PATH));
-
 // Set up API routes
-setupAnkiConnectProxy(app);
-setupImageProcessing(app);
+// setupAnkiConnectProxy(app); // Removed old proxy setup
+// setupImageProcessing(app); // Removed old image processing setup
 setupMediaRoutes(app); // Add media routes to the main server
 
-// Add schedule API routes
-app.use('/api/schedule', scheduleApiRouter);
-
-// Use the new exam API router under /api/exams
-app.use('/api/exams', examApiRouter);
-
-// Catch-all route to serve the React app
-app.get('*', (req, res) => {
-  res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
-});
+// Add tRPC endpoint
+app.use(
+  '/trpc',
+  trpcExpress.createExpressMiddleware({
+    router: appRouter,
+    // createContext, // Optional: Define context if needed (e.g., for auth)
+  }),
+);
 
 // --- Error Handling Middleware ---
 // This MUST be the last piece of middleware added

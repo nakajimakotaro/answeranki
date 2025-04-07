@@ -1,38 +1,42 @@
-import sqlite3 from 'sqlite3';
-import { Database, open } from 'sqlite';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import pg from 'pg';
 
-// ES modules compatibility
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Load environment variables from .env file in index.ts
 
-// Database file path
-const DB_PATH = path.join(__dirname, '../../study_data.sqlite');
+const { Pool } = pg;
 
-// Initialize database connection
-let db: Database<sqlite3.Database, sqlite3.Statement> | null = null;
+// Initialize database connection pool
+let pool: pg.Pool | null = null;
 
 /**
- * Initialize the database connection and create tables if they don't exist
+ * Initialize the database connection pool and create tables if they don't exist
  */
 export const initDatabase = async (): Promise<void> => {
+  if (pool) {
+    console.log('Database pool already initialized.');
+    return;
+  }
   try {
-    // Open database connection
-    db = await open({
-      filename: DB_PATH,
-      driver: sqlite3.Database
+    // Log the connection string being used
+    console.log('Attempting to connect with DATABASE_URL:', process.env.DATABASE_URL);
+    // Create a new pool instance using environment variables
+    // pg automatically uses PGHOST, PGUSER, PGDATABASE, PGPASSWORD, PGPORT if DATABASE_URL is not set
+    // Using DATABASE_URL is generally recommended for simplicity
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      // Optional: Add SSL configuration if needed for production
+      // ssl: {
+      //   rejectUnauthorized: false // Adjust as needed for your environment
+      // }
     });
-    
-    console.log('Connected to SQLite database');
-    
-    // Enable foreign keys
-    await db.exec('PRAGMA foreign_keys = ON');
-    
+
+    // Test the connection
+    await pool.query('SELECT NOW()');
+    console.log('Connected to PostgreSQL database');
+
     // Create tables if they don't exist
     await createTables();
-    
-    console.log('Database initialized successfully');
+
+    console.log('Database pool initialized successfully');
   } catch (error) {
     console.error('Database initialization error:', error);
     throw error;
@@ -40,136 +44,140 @@ export const initDatabase = async (): Promise<void> => {
 };
 
 /**
- * Create database tables if they don't exist
+ * Create database tables if they don't exist using PostgreSQL syntax
  */
 const createTables = async (): Promise<void> => {
-  if (!db) throw new Error('Database not initialized');
-  
-  // Create universities table
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS universities (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      rank INTEGER,
-      notes TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
-  // Create textbooks table
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS textbooks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      subject TEXT NOT NULL,
-      total_problems INTEGER NOT NULL DEFAULT 0,
-      anki_deck_name TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
-  // Create study_schedules table
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS study_schedules (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      textbook_id INTEGER NOT NULL,
-      start_date TEXT NOT NULL,
-      end_date TEXT NOT NULL,
-      daily_goal INTEGER,
-      buffer_days INTEGER DEFAULT 0,
-      weekday_goals TEXT,
-      total_problems INTEGER,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (textbook_id) REFERENCES textbooks (id) ON DELETE CASCADE
-    )
-  `);
-  
-  // Create exams table (merged mock_exams and exam_dates)
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS exams (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      date TEXT NOT NULL,
-      is_mock BOOLEAN NOT NULL DEFAULT 0, -- Re-added: 0 for real, 1 for mock
-      exam_type TEXT NOT NULL DEFAULT 'descriptive', -- Applicable mainly for mocks
-      university_id INTEGER, -- For real exams linked to a university
-      notes TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (university_id) REFERENCES universities (id) ON DELETE CASCADE
-    )
-  `);
-  
-  // Create exam_scores table (renamed from mock_exam_scores)
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS exam_scores (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      exam_id INTEGER NOT NULL, -- Renamed from mock_exam_id
-      note_id INTEGER NOT NULL,
-      descriptive_score REAL,
-      multiple_choice_score REAL,
-      total_score REAL,
-      max_score REAL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE -- Updated foreign key
-    )
-  `);
-  
-  // Create study_logs table
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS study_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      date TEXT NOT NULL,
-      textbook_id INTEGER NOT NULL,
-      planned_amount INTEGER DEFAULT 0,
-      actual_amount INTEGER DEFAULT 0,
-      notes TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (textbook_id) REFERENCES textbooks (id) ON DELETE CASCADE
-    )
-  `);
+  if (!pool) throw new Error('Database pool not initialized');
+  const client = await pool.connect();
+  try {
+    // Create universities table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS universities (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        rank INTEGER,
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-  // Create subject_scores table
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS subject_scores (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      exam_id INTEGER NOT NULL,
-      exam_type TEXT NOT NULL, -- '共テ' or '二次試験' etc.
-      subject TEXT NOT NULL,
-      score REAL,
-      max_score REAL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE,
-      UNIQUE (exam_id, exam_type, subject) -- Ensure uniqueness per exam, type, and subject
-    )
-  `);
-  
-  console.log('Database tables created successfully');
-};
+    // Create textbooks table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS textbooks (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        total_problems INTEGER NOT NULL DEFAULT 0,
+        anki_deck_name TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-/**
- * Get the database instance
- */
-export const getDb = (): Database<sqlite3.Database, sqlite3.Statement> => {
-  if (!db) {
-    throw new Error('Database not initialized');
+    // Create study_schedules table
+    // Note: TEXT for dates might need adjustment depending on usage. Consider DATE type.
+    // weekday_goals TEXT might be better as JSONB if structure is complex.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS study_schedules (
+        id SERIAL PRIMARY KEY,
+        textbook_id INTEGER NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+        start_date TEXT NOT NULL, -- Consider DATE type
+        end_date TEXT NOT NULL,   -- Consider DATE type
+        daily_goal INTEGER,
+        buffer_days INTEGER DEFAULT 0,
+        weekday_goals TEXT, -- Consider JSONB type
+        total_problems INTEGER,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create exams table
+    // Note: TEXT for date might need adjustment. Consider DATE type.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS exams (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        date TEXT NOT NULL, -- Consider DATE type
+        is_mock BOOLEAN NOT NULL DEFAULT FALSE,
+        exam_type TEXT NOT NULL DEFAULT 'descriptive',
+        university_id INTEGER REFERENCES universities(id) ON DELETE CASCADE,
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create exam_scores table
+    // Note: REAL type is equivalent to FLOAT4 in PostgreSQL. Consider NUMERIC for precision.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS exam_scores (
+        id SERIAL PRIMARY KEY,
+        exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+        note_id INTEGER NOT NULL, -- Assuming this relates to Anki notes, no FK here
+        descriptive_score REAL,
+        multiple_choice_score REAL,
+        total_score REAL,
+        max_score REAL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create study_logs table
+    // Note: TEXT for date might need adjustment. Consider DATE type.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS study_logs (
+        id SERIAL PRIMARY KEY,
+        date TEXT NOT NULL, -- Consider DATE type
+        textbook_id INTEGER NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+        planned_amount INTEGER DEFAULT 0,
+        actual_amount INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create subject_scores table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS subject_scores (
+        id SERIAL PRIMARY KEY,
+        exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+        exam_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        score REAL,
+        max_score REAL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (exam_id, exam_type, subject)
+      )
+    `);
+
+    console.log('Database tables checked/created successfully');
+  } finally {
+    client.release(); // Release the client back to the pool
   }
-  return db;
 };
 
 /**
- * Close the database connection
+ * Get the database pool instance
+ */
+export const getDbPool = (): pg.Pool => {
+  if (!pool) {
+    throw new Error('Database pool not initialized. Call initDatabase first.');
+  }
+  return pool;
+};
+
+/**
+ * Close the database connection pool
  */
 export const closeDatabase = async (): Promise<void> => {
-  if (db) {
-    await db.close();
-    db = null;
-    console.log('Database connection closed');
+  if (pool) {
+    await pool.end();
+    pool = null;
+    console.log('Database connection pool closed');
   }
 };

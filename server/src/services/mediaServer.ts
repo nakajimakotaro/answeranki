@@ -1,9 +1,14 @@
 import express from 'express';
 import { Express } from 'express';
-import fetch from 'node-fetch';
 
-// Media cache to store retrieved files
-let mediaCache: Record<string, string> = {};
+// Media cache to store retrieved files - Exported for sharing
+export let mediaCache: Record<string, string> = {};
+
+// Function to clear the cache - Exported for use by mediaRouter
+export const clearMediaCache = (): void => {
+  mediaCache = {};
+  console.log('Media cache cleared (from mediaServer module)');
+};
 
 /**
  * Get content type based on file extension
@@ -96,10 +101,7 @@ export const setupMediaRoutes = (app: Express): void => {
       res.status(500).send('Internal Server Error');
     }
   });
-  
-  // Clear cache endpoint
-  app.post('/api/clear-cache', (req, res) => {
-    mediaCache = {};
-    res.status(200).json({ success: true });
-  });
+
+  // Removed the old /api/clear-cache Express route.
+  // This functionality is now handled by the mediaRouter tRPC mutation.
 };

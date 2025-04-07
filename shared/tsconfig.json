@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json", // Inherit from the base config
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist", // Shared-specific output directory
+    "rootDir": ".", // Root directory relative to this tsconfig.json
+    // BaseUrl and paths are inherited.
+    // No need to redefine baseUrl or paths here.
+    // composite, declaration, declarationMap, sourceMap are inherited.
+  },
+  // include defaults to all files in the directory if not specified, which is fine here.
+  "exclude": ["node_modules", "dist"], // Exclude folders relative to this directory
+  // No references needed within the shared package itself
+}

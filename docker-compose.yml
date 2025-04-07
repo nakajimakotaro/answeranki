@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15 # バージョンは必要に応じて変更可能
+    container_name: answeranki-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-answeranki_db} # デフォルト値を設定
+      POSTGRES_USER: ${POSTGRES_USER:-user}     # デフォルト値を設定
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password} # デフォルト値を設定
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

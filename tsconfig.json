@@ -1,7 +1,8 @@
 {
   "files": [],
   "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+    { "path": "./web" }, // Point to the directory instead of the file
+    { "path": "./server" },
+    { "path": "./shared" }
+  ],
 }

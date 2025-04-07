@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.base.json", // Inherit from the base config
+  "compilerOptions": {
+    // Override or add web-specific options
+    "target": "ES2020", // Keep web-specific target if needed
+    "lib": ["ES2020", "DOM", "DOM.Iterable"], // Web-specific libraries
+    "useDefineForClassFields": true,
+    "jsx": "react-jsx", // React specific
+    "isolatedModules": true, // Vite requirement
+    "noEmit": true, // Vite handles emission, TS only for type checking
+
+    // tsBuildInfoFile is often used for incremental builds, keep if needed by Vite/build process
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.web.tsbuildinfo", // Renamed for clarity
+    "moduleResolution": "bundler",
+    "module": "ESNext", // Add module setting compatible with bundler resolution
+  },
+  "include": ["src"], // Include source files relative to this directory
+  "exclude": ["node_modules", "dist"], // Exclude folders relative to this directory (dist might not be relevant with noEmit)
+  "references": [ // References relative to this directory
+    { "path": "../server" },
+    { "path": "../shared" }
+  ]
+}

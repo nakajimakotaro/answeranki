@@ -1,3 +1,5 @@
+import { z } from 'zod'; // Import Zod
+
 /**
  * Shared types for Exam data between client and server.
  */
@@ -30,8 +32,9 @@ export interface Exam {
   exam_type: string; // Matches DB schema (e.g., 'descriptive', 'multiple_choice')
   university_id?: number | null; // Matches DB schema (Nullable)
   notes?: string | null; // Matches DB schema (Nullable)
-  created_at: string; // Matches DB schema (Assuming string timestamp)
-  updated_at: string; // Matches DB schema (Assuming string timestamp)
+  // created_at and updated_at are internal, not needed by client
+  // created_at: string; // Matches DB schema (Assuming string timestamp)
+  // updated_at: string; // Matches DB schema (Assuming string timestamp)
   // Optional fields that might be added by API joins
   university_name?: string | null;
   // Optional: Scores might be loaded separately or included depending on the API endpoint
@@ -116,3 +119,53 @@ export interface SubjectScoreInput {
 export interface BatchSubjectScoreInput {
   scores: SubjectScoreInput[];
 }
+
+// --- Zod Schemas ---
+
+// Base schema for Exam, matching the interface
+export const ExamSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  date: z.string(), // Consider z.date() if conversion is handled
+  is_mock: z.boolean(),
+  exam_type: z.string(),
+  university_id: z.number().int().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  // Remove created_at and updated_at from the schema sent to client
+  // created_at: z.string(), // Consider z.date()
+  // updated_at: z.string(), // Consider z.date()
+  // Optional fields from joins - keep optional
+  university_name: z.string().nullable().optional(),
+  // Optional arrays - keep optional and define their schemas
+  scores: z.array(z.lazy(() => ExamScoreSchema)).optional(), // Use lazy for potential circular refs if needed
+  subject_scores: z.array(z.lazy(() => SubjectScoreSchema)).optional(),
+});
+
+// Base schema for ExamScore, matching the interface
+export const ExamScoreSchema = z.object({
+  id: z.number().int(),
+  exam_id: z.number().int(),
+  note_id: z.number().int(),
+  descriptive_score: z.number().nullable().optional(),
+  multiple_choice_score: z.number().nullable().optional(),
+  total_score: z.number().nullable().optional(),
+  max_score: z.number().nullable().optional(),
+  created_at: z.string().optional(), // Make optional if not always present
+  updated_at: z.string().optional(), // Make optional if not always present
+  // Optional fields from joins
+  exam_name: z.string().optional(),
+  exam_date: z.string().optional(),
+  is_mock: z.boolean().optional(),
+});
+
+// Base schema for SubjectScore, matching the interface
+export const SubjectScoreSchema = z.object({
+  id: z.number().int(),
+  exam_id: z.number().int(),
+  exam_type: z.string(),
+  subject: z.string(),
+  score: z.number().nullable().optional(),
+  max_score: z.number().nullable().optional(),
+  created_at: z.string(), // Consider z.date()
+  updated_at: z.string(), // Consider z.date()
+});

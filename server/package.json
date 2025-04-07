@@ -6,20 +6,21 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "nodemon --exec node --loader ts-node/esm src/index.ts",
+    "dev": "npm run build && concurrently \"tsc -w\" \"nodemon\"",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@trpc/server": "^11.0.1",
+    "@answeranki/shared": "workspace:^",
+    "@trpc/server": "^11.0.2",
+    "@types/pg": "^8.11.11",
     "cors": "^2.8.5",
-    "date-fns": "^4.1.0",
-    "express": "^4.18.2",
-    "node-fetch": "^3.3.2",
+    "express": "^4.21.2",
+    "nanoid": "^5.1.5",
+    "pg": "^8.14.1",
     "sharp": "^0.33.2",
     "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
-    "zod": "^3.24.2"
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -27,7 +28,6 @@
     "@types/node": "^20.11.5",
     "@types/sqlite3": "^3.1.11",
     "nodemon": "^3.0.3",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.8.2"
   }
 }
