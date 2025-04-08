@@ -27,7 +27,7 @@ export type SubjectExamType = '共テ' | '二次試験';
 export interface Exam {
   id: number;
   name: string;
-  date: string; // YYYY-MM-DD (Matches DB schema)
+  date: Date; // Changed to Date
   is_mock: boolean; // true: 模試, false: 本番 (Matches DB schema)
   exam_type: string; // Matches DB schema (e.g., 'descriptive', 'multiple_choice')
   university_id?: number | null; // Matches DB schema (Nullable)
@@ -49,10 +49,10 @@ export interface ExamScore {
   multiple_choice_score?: number | null;
   total_score?: number | null;
   max_score?: number | null;
-  created_at?: string;
-  updated_at?: string;
+  created_at?: Date | null; // Changed to Date
+  updated_at?: Date | null; // Changed to Date
   exam_name?: string;
-  exam_date?: string; // Keep consistent if joined data uses 'date'
+  exam_date?: Date | null; // Changed to Date
   is_mock?: boolean;
 }
 
@@ -66,8 +66,8 @@ export interface SubjectScore {
   subject: string;
   score?: number | null;
   max_score?: number | null;
-  created_at: string;
-  updated_at: string;
+  created_at: Date; // Changed to Date
+  updated_at: Date; // Changed to Date
 }
 
 
@@ -76,7 +76,7 @@ export interface SubjectScore {
  */
 export interface ExamInput {
   name: string;
-  date: string; // Matches DB schema
+  date: Date; // Changed to Date (Consider using z.coerce.date in schema)
   is_mock: boolean;
   exam_type: string; // Matches DB schema
   university_id?: number | null;
@@ -114,10 +114,11 @@ export interface BatchSubjectScoreInput {
 }
 
 
+// Zod Schemas
 export const ExamSchema = z.object({
   id: z.number().int(),
   name: z.string(),
-  date: z.string(),
+  date: z.date(), // Changed to z.date()
   is_mock: z.boolean(),
   exam_type: z.string(),
   university_id: z.number().int().nullable().optional(),
@@ -135,10 +136,10 @@ export const ExamScoreSchema = z.object({
   multiple_choice_score: z.number().nullable().optional(),
   total_score: z.number().nullable().optional(),
   max_score: z.number().nullable().optional(),
-  created_at: z.string().optional(),
-  updated_at: z.string().optional(),
+  created_at: z.date().optional().nullable(), // Changed to z.date()
+  updated_at: z.date().optional().nullable(), // Changed to z.date()
   exam_name: z.string().optional(),
-  exam_date: z.string().optional(),
+  exam_date: z.date().optional().nullable(), // Changed to z.date()
   is_mock: z.boolean().optional(),
 });
 
@@ -149,6 +150,25 @@ export const SubjectScoreSchema = z.object({
   subject: z.string(),
   score: z.number().nullable().optional(),
   max_score: z.number().nullable().optional(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  created_at: z.date(), // Changed to z.date()
+  updated_at: z.date(), // Changed to z.date()
 });
+
+// Input schema using coerce.date for flexibility
+export const ExamInputSchema = z.object({
+  name: z.string(),
+  date: z.coerce.date(), // Use coerce.date for input
+  is_mock: z.boolean(),
+  exam_type: z.string(),
+  university_id: z.number().int().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+export type ExamInputType = z.infer<typeof ExamInputSchema>; // Export inferred type
+
+// Add ExamUpdateSchema by extending ExamInputSchema with id
+export const ExamUpdateSchema = ExamInputSchema.extend({
+  id: z.number().int().positive(),
+});
+export type ExamUpdateInputType = z.infer<typeof ExamUpdateSchema>; // Export inferred type
+
+// Consider adding input schemas for ExamScore and SubjectScore if needed

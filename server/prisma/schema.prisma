@@ -10,7 +10,7 @@ datasource db {
 model exam_scores {
   id                    Int       @id @default(autoincrement())
   exam_id               Int
-  note_id               Int
+  note_id               BigInt // Changed from Int to BigInt
   descriptive_score     Float?    @db.Real
   multiple_choice_score Float?    @db.Real
   total_score           Float?    @db.Real
@@ -23,7 +23,7 @@ model exam_scores {
 model exams {
   id             Int              @id @default(autoincrement())
   name           String
-  date           String
+  date           DateTime         @db.Date // Changed from String
   is_mock        Boolean          @default(false)
   exam_type      String           @default("descriptive")
   university_id  Int?
@@ -37,7 +37,7 @@ model exams {
 
 model study_logs {
   id             Int       @id @default(autoincrement())
-  date           String
+  date           DateTime  @db.Date // Changed from String
   textbook_id    Int
   planned_amount Int?      @default(0)
   actual_amount  Int?      @default(0)
@@ -50,8 +50,8 @@ model study_logs {
 model study_schedules {
   id             Int       @id @default(autoincrement())
   textbook_id    Int
-  start_date     String
-  end_date       String
+  start_date     DateTime  @db.Date // Changed from String
+  end_date       DateTime  @db.Date // Changed from String
   daily_goal     Int?
   buffer_days    Int?      @default(0)
   weekday_goals  String?

@@ -1,23 +1,25 @@
-# Principles for Error Handling and Code Modification
+# エラーハンドリングとコード修正に関する原則
 
-When modifying code or handling errors, adhere to the following principles across both client-side and server-side development:
+コードの修正やエラー処理を行う際には、クライアントサイドとサーバーサイドの両開発において、以下の原則に従ってください。
 
-1.  **Avoid Naive Fallbacks:**
-    *   Do not implement fallback logic that merely masks underlying problems when an error occurs. Treat critical errors (e.g., missing dependencies, failed essential operations like image conversion) as explicit failures and interrupt the process accordingly, rather than hiding the issue.
-2.  **Specific and Purposeful Error Handling:**
-    *   Use `try...catch` blocks judiciously, targeting specific, expected error types. Implement error handling logic that is directly related to the caught error's context. Avoid complex alternative logic within `catch` blocks as a general rule.
-3.  **Clear Error Reporting:**
-    *   When an error occurs, generate clear, informative error messages that explain the cause and context. Include these messages in logs and/or responses to the client to facilitate debugging and understanding.
-4.  **Code Cleanup During Refactoring:**
-    *   When refactoring or modifying code, completely remove obsolete logic, unused code snippets, and commented-out code blocks. Maintain code clarity and eliminate potentially confusing remnants. Ensure the codebase reflects only the current, intended logic.
-5.  **Validate Inputs, Trust Internal Data:**
-    *   Perform validation primarily at the input boundaries of your system (e.g., user input, API request parameters). Assume data retrieved from trusted internal sources (like your database) is valid according to the established schema or format.
-    *   Do not add redundant checks or parsing validation for internal data (e.g., assuming a date string from the DB might be unparsable). This adds unnecessary complexity and noise.
-    *   If unexpected data corruption *does* occur from an internal source (which should be rare and indicates a deeper issue), allow the system's natural exception handling mechanisms (e.g., a parsing error) to signal the problem rather than implementing preemptive, speculative checks.
-6.  **Avoid Redundant Default Values for Trusted Data:**
-    *   Building upon Principle 5, when working with data retrieved from trusted internal sources (e.g., the application's database where schema and integrity are controlled), avoid adding defensive code like nullish coalescing (`??`) or optional chaining (`?.`) solely to provide default values for properties that *should* always exist according to the established data model.
-    *   Such patterns can mask underlying data integrity issues or bugs in data creation/migration logic. Assume the data conforms to the expected structure. If a required property is unexpectedly missing, it signifies a deeper problem that should surface as an error (e.g., `TypeError: Cannot read properties of undefined`), rather than being silently handled by a default value.
-7.  **Prioritize Global Error Handling (Client-Side):**
-    *   On the client-side (e.g., React applications), rely primarily on global error handling mechanisms like Error Boundaries and centralized API error handling (e.g., via React Query/tRPC configurations).
-    *   Avoid using individual `try...catch` blocks within components for general error handling (e.g., catching rendering errors, API call failures, parsing errors). Let these errors propagate to the global handlers.
-    *   Reserve `try...catch` for very specific, localized scenarios where immediate, context-specific fallback or recovery logic is *essential* and cannot be handled globally (e.g., attempting a connection to an external device like a scanner or AnkiConnect, where a specific "connection failed" message is more informative than a generic error). Even in these cases, consider if simply letting the error propagate and displaying a clear message via the global handler is sufficient.
+1.  **安易なフォールバックの回避:**
+    *   問題を単に隠蔽するようなフォールバックロジックを実装しないでください。重要なエラー（例：依存関係の欠落、画像変換のような必須処理の失敗）は、問題を隠すのではなく、明示的な失敗として扱い、プロセスを適切に中断してください。
+2.  **具体的かつ目的を持ったエラーハンドリング:**
+    *   `try...catch` ブロックは慎重に使用し、特定の予期されるエラータイプを対象としてください。捕捉したエラーのコンテキストに直接関連するエラー処理ロジックを実装してください。原則として、`catch` ブロック内で複雑な代替ロジックを使用することは避けてください。
+3.  **コードのクリーンアップと保守性:**
+    *   コードのリファクタリングや修正を行う際には、廃止されたロジック、未使用のコードスニペット、コメントアウトされたコードブロック（例: `// Removed`, `// Old` など）を完全に削除してください。
+    *   使用されなくなったファイルもプロジェクトから削除してください。
+    *   コードの明瞭さを維持し、混乱を招く可能性のある残骸を排除してください。コードベースには、現在意図されているロジックのみが反映されるようにしてください。
+4.  **入力は検証し、内部データは信頼する:**
+    *   検証は主にシステムの入力境界（例：ユーザー入力、APIリクエストパラメータ）で実行してください。信頼できる内部ソース（データベースなど）から取得したデータは、確立されたスキーマまたは形式に従って有効であると想定してください。
+    *   内部データに対して冗長なチェックやパース検証を追加しないでください（例：DBからの日付文字列がパース不能かもしれないと仮定するなど）。これは不必要な複雑さとノイズを追加します。
+    *   （まれに発生し、より深い問題を示す）予期しないデータ破損が内部ソースから発生した場合、予防的で推測的なチェックを実装するのではなく、システムの自然な例外処理メカニズム（例：パースエラー）に問題を示させてください。
+5.  **自然なエラー伝播の許容:**
+    *   原則4に基づき、信頼できる内部ソースからのデータ（例：DBからのJSON文字列）を処理する際、データ形式が期待通りでない可能性を過度に防御しないでください。例えば、JSONパースに失敗した場合や、パース後のオブジェクトに必要なプロパティが存在しない場合、`try...catch` で個別に捕捉してエラーを生成するのではなく、後続のコードでそのデータにアクセスしようとした際に自然に発生するエラー（例：`JSON.parse` のエラー、`TypeError: Cannot read properties of undefined` など）に任せてください。これらのエラーは、より上位のエラーハンドリング機構（原則7参照）で捕捉されるべきです。手動でエラーをスローしたり、ローカルで処理したりする必要はありません。これにより、コードがシンプルになり、エラーの原因特定が容易になります。
+6.  **信頼できるデータに対する冗長なデフォルト値の回避:**
+    *   原則4と5に基づき、信頼できる内部ソース（スキーマと整合性が管理されているアプリケーションのデータベースなど）から取得したデータを扱う際、確立されたデータモデルによれば常に存在するはずのプロパティに対して、デフォルト値を提供するためだけにnull合体演算子（`??`）やオプショナルチェイニング（`?.`）のような防御的コードを追加することは避けてください。
+    *   このようなパターンは、根本的なデータの整合性の問題や、データ作成/移行ロジックのバグを隠蔽する可能性があります。データが期待される構造に準拠していると想定してください。必須プロパティが予期せず欠落している場合、それはデフォルト値で静かに処理されるのではなく、エラー（例：`TypeError: Cannot read properties of undefined`）として表面化すべき、より深い問題を示唆します。
+7.  **グローバルエラーハンドリングの優先（クライアントサイド）:**
+    *   クライアントサイド（例：Reactアプリケーション）では、主にエラーバウンダリや、一元化されたAPIエラーハンドリング（例：React Query/tRPCの設定経由）のようなグローバルなエラーハンドリングメカニズムに依存してください。
+    *   一般的なエラーハンドリング（例：レンダリングエラー、API呼び出し失敗、パースエラーの捕捉）のために、コンポーネント内で個別の `try...catch` ブロックを使用することは避けてください。これらのエラーはグローバルハンドラに伝播させてください。
+    *   `try...catch` は、即時かつコンテキスト固有のフォールバックや回復ロジックが*不可欠*であり、グローバルに処理できない非常に特定の、ローカライズされたシナリオ（例：スキャナーやAnkiConnectのような外部デバイスへの接続試行で、一般的なエラーよりも具体的な「接続失敗」メッセージが有益な場合）のために予約してください。これらの場合でも、単にエラーを伝播させ、グローバルハンドラ経由で明確なメッセージを表示するだけで十分かどうかを検討してください。

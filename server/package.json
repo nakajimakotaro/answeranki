@@ -19,7 +19,8 @@
     "nanoid": "^5.1.5",
     "sharp": "^0.33.2",
     "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "superjson": "^2.2.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

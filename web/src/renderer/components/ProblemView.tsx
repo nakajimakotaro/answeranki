@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { parse, compareDesc } from 'date-fns';
 import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Scan, Maximize, XCircle, Play, Pause, StopCircle, Clock } from 'lucide-react';
 import { useNotes, useAnkiConnect, useMediaFiles } from '../hooks/index.js';
-import MockExamScoresList from './MockExamScoresList.js';
+// MockExamScoresList import removed
 import { NoteInfo } from '../types/ankiConnect.js';
 import scansnap, { COLOR_MODE, COMPRESSION, FORMAT, SCAN_MODE, SCANNING_SIDE } from '../../scansnap.js';
 import { nanoid } from 'nanoid';
@@ -867,9 +867,7 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                 </div>
               )}
 
-              {showAnswer && problemData.noteId && (
-                <MockExamScoresList noteId={problemData.noteId} />
-              )}
+              {/* MockExamScoresList removed */}
             </div>
           )}
         </div>

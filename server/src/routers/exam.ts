@@ -4,14 +4,17 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { publicProcedure, router } from '../trpc.js';
 import prisma from '../db/prisma.js';
 import {
-  ExamSchema,
+  ExamSchema, // Keep only one
   ExamScoreSchema,
   SubjectScoreSchema,
+  ExamInputSchema, // Import the new input schema
   type Exam,
   type ExamScore,
   type SubjectScore,
 } from '@answeranki/shared/types/exam';
 
+// Remove local CreateExamInputSchema
+/*
 const CreateExamInputSchema = z.object({
   name: z.string().min(1, 'Exam name is required'),
   date: z.string().min(1, 'Exam date is required'),
@@ -20,8 +23,10 @@ const CreateExamInputSchema = z.object({
   university_id: z.number().int().nullable().optional(),
   notes: z.string().nullable().optional(),
 });
+*/
 
-const UpdateExamInputSchema = CreateExamInputSchema.extend({
+// Update UpdateExamInputSchema to extend the imported schema
+const UpdateExamInputSchema = ExamInputSchema.extend({
   id: z.number().int(),
 });
 
@@ -53,9 +58,10 @@ const BatchUpsertSubjectScoresInputSchema = z.object({
     scores: z.array(BatchSubjectScoreItemSchema),
 });
 
+// Update ExamScoreWithExamDetailsSchema to use z.date()
 const ExamScoreWithExamDetailsSchema = ExamScoreSchema.extend({
   exam_name: z.string(),
-  exam_date: z.string(),
+  exam_date: z.date().nullable().optional(), // Changed from z.string()
   is_mock: z.boolean(),
 });
 
@@ -85,13 +91,14 @@ export const examRouter = router({
     }),
 
   create: publicProcedure
-    .input(CreateExamInputSchema)
+    .input(ExamInputSchema) // Use imported schema
     .mutation(async ({ input }) => {
+      // input.date is now a Date object due to ExamInputSchema using z.coerce.date()
       const { name, date, is_mock, exam_type, university_id, notes } = input;
       const newExam = await prisma.exams.create({
         data: {
           name,
-          date: date,
+          date: date, // Pass Date object directly
           is_mock,
           exam_type,
           university_id: university_id ?? null,
@@ -102,14 +109,15 @@ export const examRouter = router({
     }),
 
   update: publicProcedure
-    .input(UpdateExamInputSchema)
+    .input(UpdateExamInputSchema) // Uses the extended schema
     .mutation(async ({ input }) => {
+      // input.date is now a Date object
       const { id, name, date, is_mock, exam_type, university_id, notes } = input;
       const updatedExam = await prisma.exams.update({
         where: { id },
         data: {
             name,
-            date: date,
+            date: date, // Pass Date object directly
             is_mock,
             exam_type,
             university_id: university_id ?? null,
@@ -304,7 +312,7 @@ export const examRouter = router({
       const transformedScores = scoresData.map((score: ScoreWithExam) => ({
         ...score,
         exam_name: score.exams.name,
-        exam_date: score.exams.date,
+        exam_date: score.exams.date, // Pass Date object directly
         is_mock: score.exams.is_mock,
       }));
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns'; // Import format function
 // Import StudyLog type from shared schema definitions
-import type { StudyLog } from '@shared/schemas/schedule'; // Assuming StudyLog is here, adjust if needed
+import type { StudyLog } from '@shared/schemas/schedule'; // This type now uses Date objects
 import { trpc } from '../lib/trpc.js'; // Import tRPC client
 import type { inferRouterOutputs } from '@trpc/server'; // Import helper type
 // Adjust the path to your AppRouter definition if necessary
@@ -15,9 +16,9 @@ type TextbookOutput = RouterOutput['textbook']['getTextbooks'][number];
 // コンポーネントのプロパティ型定義
 export interface DailyLogInputProps {
   textbooks: TextbookOutput[]; // Use inferred Textbook type
-  date: string;
+  date: Date; // Changed prop type from string to Date
   onLogUpdated: () => void;
-  existingLogs: StudyLog[]; // Ensure this StudyLog type matches the import
+  existingLogs: StudyLog[]; // This type now uses Date objects
 }
 
 const DailyLogInput: React.FC<DailyLogInputProps> = ({
@@ -102,8 +103,9 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
     setValidationError(null);
     setSuccess(null);
 
+    // Pass the Date object directly. The input schema uses z.coerce.date().
     const logInputData = {
-        date,
+        date, // Pass the Date object received via props
         textbook_id: selectedTextbook.id,
         actual_amount: actualAmount,
         notes: notes || undefined,
@@ -174,7 +176,7 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
             <input
               type="text"
               className="w-full p-2 border border-gray-300 rounded-md bg-gray-100"
-              value={date}
+              value={format(date, 'yyyy-MM-dd')} // Format Date for display
               disabled
             />
           </div>

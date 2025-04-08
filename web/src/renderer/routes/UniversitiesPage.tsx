@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'; // Add useMemo
+// Import format from date-fns
 import { parseISO, differenceInDays, startOfToday, isBefore, format } from 'date-fns';
 import { trpc } from '../lib/trpc'; // Import tRPC hook - Removed .js
 // import { examService } from '../services/examService'; // Removed examService import
@@ -15,7 +16,9 @@ import type { AppRouter } from '@server/router'; // Removed .js extension
 type RouterOutput = inferRouterOutputs<AppRouter>; // Use AppRouter for inference
 type University = RouterOutput['university']['getAll'][number]; // Correctly infer University type
 // Infer Exam type from tRPC output (assuming getAll returns the base Exam type)
-type ExamOutput = RouterOutput['exam']['getAll'][number];
+// Assuming exam.date from the server is Date type
+type ExamOutput = Omit<RouterOutput['exam']['getAll'][number], 'date'> & { date: Date | null };
+
 // Define a type for Exam with the optional university_name added in the component
 type ExamWithUniName = ExamOutput & { university_name?: string };
 
@@ -29,8 +32,8 @@ const UniversitiesPage = () => {
 
   // Process exams to add university names (memoized)
   const exams: ExamWithUniName[] = useMemo(() => {
-    // Remove the type assertion 'as ExamOutput[]' as server should return correct type now
-    const examsOutput = rawExams;
+    // Ensure rawExams is correctly typed or cast if necessary, assuming date is Date | null
+    const examsOutput = rawExams as unknown as (Omit<RouterOutput['exam']['getAll'][number], 'date'> & { date: Date | null })[];
     // Always map to ExamWithUniName[], even if universities is empty (university_name will be undefined)
     return examsOutput.map((exam): ExamWithUniName => ({
       ...exam,
@@ -52,7 +55,7 @@ const UniversitiesPage = () => {
 
   // Exam form state
   const [universityId, setUniversityId] = useState<number | undefined>(undefined);
-  const [examDate, setExamDate] = useState('');
+  const [examDate, setExamDate] = useState(''); // Keep as string for input type="date"
   const [examType, setExamType] = useState<UniversityExamType | ''>('');
 
   // Removed useEffect for fetching exams, handled by trpc.exam.getAll.useQuery
@@ -86,7 +89,8 @@ const UniversitiesPage = () => {
   const openEditExamModal = (exam: ExamWithUniName) => { // Use ExamWithUniName
     setEditingExam(exam);
     setUniversityId(exam.university_id ?? undefined);
-    setExamDate(exam.date);
+    // Convert Date to 'yyyy-MM-dd' string for input
+    setExamDate(exam.date ? format(exam.date, 'yyyy-MM-dd') : '');
     setExamType(exam.exam_type as UniversityExamType | '');
     setIsExamModalOpen(true);
   };
@@ -204,9 +208,21 @@ const UniversitiesPage = () => {
     const uniName = universities?.find((u: University) => u.id === universityId)?.name; // Add type for u
     const examName = examType === '模試' ? '模試' : (uniName ? `${uniName} ${examType}` : examType);
 
+    // Convert string date to Date object for API
+    let dateToSend: Date | null = null;
+    try {
+        // Use parseISO to handle the 'yyyy-MM-dd' string correctly
+        dateToSend = parseISO(examDate);
+    } catch (error) {
+        console.error("Invalid date format:", examDate);
+        alert('無効な日付形式です。');
+        return; // Stop submission if date is invalid
+    }
+
+
     const examInput: ExamInput = {
       name: examName,
-      date: examDate,
+      date: dateToSend, // Send Date object
       is_mock: examType === '模試',
       exam_type: examType,
       university_id: examType === '模試' ? null : universityId,
@@ -236,13 +252,13 @@ const UniversitiesPage = () => {
     deleteExamMutation.mutate({ id });
   };
 
-  // Calculate Days Remaining
-  const calculateDaysRemaining = (date: string | null | undefined): number => {
+  // Calculate Days Remaining - Expects Date object now
+  const calculateDaysRemaining = (date: Date | null): number => {
     if (!date) return NaN;
     const todayDate = startOfToday();
-    const parsedDate = parseISO(date); // Assume date from DB is valid and parseISO will throw if not
-    if (isBefore(parsedDate, todayDate)) return 0; // Keep check for past dates
-    return differenceInDays(parsedDate, todayDate) + 1;
+    // No need to parseISO if 'date' is already a Date object
+    if (isBefore(date, todayDate)) return 0; // Keep check for past dates
+    return differenceInDays(date, todayDate) + 1;
   };
 
   // Combined Loading State using tRPC loading states
@@ -369,6 +385,7 @@ const UniversitiesPage = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {exams.length > 0 ? (
                 exams.map((exam) => {
+                  // Pass Date object directly to calculateDaysRemaining
                   const daysRemaining = calculateDaysRemaining(exam.date);
                   const displayDays = !isNaN(daysRemaining) ? daysRemaining : null;
                   return (
@@ -379,7 +396,8 @@ const UniversitiesPage = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{exam.exam_type}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{exam.date ? format(parseISO(exam.date), 'yyyy/MM/dd') : '-'}</td>
+                      {/* Format Date object directly for display */}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{exam.date ? format(exam.date, 'yyyy/MM/dd') : '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {displayDays !== null ? (
                           <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${

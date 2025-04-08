@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { getYear, getDaysInYear, startOfYear, getDay, addDays, format, getDate, getMonth } from 'date-fns'; // Import date-fns functions, removed parseISO as it's not used directly here anymore
-import { trpc } from '../lib/trpc'; // Import tRPC client
+import { trpc, rawTrpcClient } from '../lib/trpc.js'; // Import tRPC client
 import { Calendar, Filter, BarChart2 } from 'lucide-react'; // Removed BookOpen as filter/stats are removed
+import { raw } from 'express';
 
 interface YearlyActivityCalendarProps {
   year?: number;
@@ -18,7 +19,9 @@ const YearlyActivityCalendar = ({
   const [hoveredDay, setHoveredDay] = useState<{date: string, amount: number} | null>(null);
 
   // --- tRPC Query ---
-  const { data: yearlyLogAmounts, isLoading, error: queryError } = trpc.schedule.getYearlyLogs.useQuery(
+  // The data type is now Array<{ date: Date, count: number }> | undefined
+
+  const { data: yearlyLogsArray, isLoading, error: queryError } = trpc.schedule.getYearlyLogs.useQuery(
     { year: selectedYear },
     {
       staleTime: 5 * 60 * 1000, // Cache data for 5 minutes
@@ -30,8 +33,24 @@ const YearlyActivityCalendar = ({
 
   // 年間の日付データを生成
   const calendarData = useMemo(() => {
-    // Use yearlyLogAmounts from tRPC query (Record<string, number>)
-    if (!yearlyLogAmounts) return {
+    // Convert the array from tRPC query to a Record<string, number> for easy lookup
+    const yearlyLogAmountsMap: Record<string, number> = {};
+    // Check if yearlyLogsArray exists before iterating
+    if (yearlyLogsArray) {
+      // Remove explicit type annotation, let TS infer from useQuery (should be Date)
+      yearlyLogsArray.forEach((log) => {
+        // Ensure log.date is a valid Date object before formatting (safeguard)
+        if (log.date instanceof Date && !isNaN(log.date.getTime())) {
+          const dateString = format(log.date, 'yyyy-MM-dd');
+          yearlyLogAmountsMap[dateString] = log.count;
+        } else {
+          console.warn("Invalid date received from getYearlyLogs:", log.date);
+        }
+      });
+    }
+
+    // If the source array was undefined/null, return empty structure
+    if (!yearlyLogsArray) return {
       days: [],
       weeks: [],
       maxAmount: 0
@@ -45,10 +64,10 @@ const YearlyActivityCalendar = ({
     // 年間の全日付を生成 (date-fns を使用)
     const allDays = Array.from({ length: daysInYear }, (_, i) => {
       const date = addDays(yearStartDate, i); // Calculate each day using addDays
-      const dateString = format(date, 'yyyy-MM-dd'); // Format date string using date-fns
+      const dateString = format(date, 'yyyy-MM-dd'); // Format date string
 
-      // Get the amount for the specific date from the yearlyLogAmounts record
-      const amount = yearlyLogAmounts[dateString] || 0;
+      // Get the amount for the specific date from the generated map
+      const amount = yearlyLogAmountsMap[dateString] || 0;
 
       return {
         date: dateString,
@@ -91,7 +110,7 @@ const YearlyActivityCalendar = ({
       weeks,
       maxAmount
     };
-  }, [yearlyLogAmounts, selectedYear]); // Updated dependency array
+  }, [yearlyLogsArray, selectedYear]); // Depend on the new array variable
 
   // 色の強度を計算
   const getColorClass = (amount: number) => {
@@ -129,8 +148,8 @@ const YearlyActivityCalendar = ({
     );
   }
 
-  // Render calendar only if data is available
-  if (!yearlyLogAmounts) {
+  // Render calendar only if data is available (check the source array)
+  if (!yearlyLogsArray) {
      return (
        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
          データがありません。
@@ -194,7 +213,8 @@ const YearlyActivityCalendar = ({
         
         <div className="flex">
           {/* 曜日ラベル */}
-          <div className="w-8 mr-2">
+          {/* Add flex flex-col gap-1 to align vertically with the grid */}
+          <div className="w-8 mr-2 flex flex-col gap-1">
             {dayOfWeekNames.map((day, index) => (
               <div key={index} className="h-4 text-xs text-gray-500 flex items-center justify-end pr-1">
                 {day}

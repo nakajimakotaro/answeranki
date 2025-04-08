@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { httpBatchLink } from '@trpc/client';
-import React, { useState, useCallback, ErrorInfo } from 'react';
+import { useState, useCallback, ErrorInfo } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ErrorBoundary, FallbackProps } from 'react-error-boundary';
 import './App.css';
@@ -8,17 +8,17 @@ import Layout from './renderer/components/Layout.js';
 import GlobalErrorDisplay from './renderer/components/GlobalErrorDisplay.js';
 import { ErrorProvider, useError } from './renderer/context/ErrorContext.js';
 import { trpc } from './renderer/lib/trpc.js';
+import superjson from 'superjson';
 import ProblemDetail from './renderer/routes/ProblemDetail.js';
 import Settings from './renderer/routes/Settings.js';
 import ProblemList from './renderer/routes/ProblemList.js';
-import CurrentProblem from './renderer/routes/CurrentProblem.js';
+import ProblemView from './renderer/components/ProblemView.js';
 import Dashboard from './renderer/routes/Dashboard.js';
 import TextbooksPage from './renderer/routes/TextbooksPage.js';
 import UniversitiesPage from './renderer/routes/UniversitiesPage.js';
 import SchedulesPage from './renderer/routes/SchedulesPage.js';
 import ExamsPage from './renderer/routes/ExamsPage.js';
 
-// エラーフォールバックコンポーネント
 const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
   return (
     <div role="alert" style={{ padding: '20px', border: '1px solid red', margin: '20px' }}>
@@ -32,7 +32,6 @@ const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
   );
 };
 
-// AppContent は変更なし
 function AppContent() {
   return (
     <Router>
@@ -42,7 +41,7 @@ function AppContent() {
           <Route index element={<Dashboard />} />
           <Route path="problem/:id" element={<ProblemDetail />} />
           <Route path="problems" element={<ProblemList />} />
-          <Route path="current" element={<CurrentProblem />} />
+          <Route path="current" element={<ProblemView isCurrentCard={true} />} />
           <Route path="textbooks" element={<TextbooksPage />} />
           <Route path="universities" element={<UniversitiesPage />} />
           <Route path="schedules" element={<SchedulesPage />} />
@@ -54,9 +53,7 @@ function AppContent() {
   );
 }
 
-// ErrorBoundary とそのコールバックをラップする新しいコンポーネント
 function AppWithErrorBoundary() {
-  // このコンポーネントは ErrorProvider の内側でレンダリングされるため、useError を安全に呼び出せる
   const { setError } = useError();
 
   const handleBoundaryError = useCallback((error: Error, info: ErrorInfo) => {
@@ -85,7 +82,6 @@ function AppWithErrorBoundary() {
 
 
 function App() {
-  // QueryClient と tRPCClient の設定は変更なし
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -106,12 +102,11 @@ function App() {
       links: [
         httpBatchLink({
           url: '/trpc',
+          transformer: superjson,
         }),
       ],
     }),
   );
-
-  // useError の呼び出しは削除
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>

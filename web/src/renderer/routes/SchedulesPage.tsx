@@ -8,6 +8,7 @@ import {
   isValid,
   isEqual,
   startOfDay,
+  format,
 } from 'date-fns';
 import { trpc } from '../lib/trpc';
 import type { StudySchedule } from '@shared/schemas/schedule';
@@ -22,7 +23,7 @@ import StudyGanttChart from '../components/StudyGanttChartComponent';
 interface TimelineEventWithDate extends Omit<SharedTimelineEvent, 'startDate' | 'endDate' | 'details'> {
   startDate: Date;
   endDate?: Date;
-  details: StudySchedule | any; // Exam 型なども考慮する必要があるが、一旦 StudySchedule を優先
+  details: StudySchedule | any;
 }
 
 
@@ -214,8 +215,8 @@ const SchedulesPage = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {schedulesData.length > 0 ? (
               schedulesData.map((schedule) => {
-                const startDateObj = parseISO(schedule.start_date);
-                const endDateObj = parseISO(schedule.end_date);
+                const startDateObj = schedule.start_date;
+                const endDateObj = schedule.end_date;
 
                 const totalDays = calculateDays(startDateObj, endDateObj);
                 const remainingDays = calculateRemainingDays(endDateObj);
@@ -235,7 +236,8 @@ const SchedulesPage = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div>{schedule.start_date} 〜 {schedule.end_date}</div>
+                      {/* Format Date objects before rendering */}
+                      <div>{format(startDateObj, 'yyyy/MM/dd')} 〜 {format(endDateObj, 'yyyy/MM/dd')}</div>
                       <div className="text-xs">
                         {totalDays}日間（残り{remainingDays > 0 ? remainingDays : 0}日）
                       </div>

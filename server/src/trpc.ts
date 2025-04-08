@@ -1,10 +1,16 @@
 import { initTRPC } from '@trpc/server';
+import superjson from 'superjson'; // Import superjson
 
 /**
  * Initialization of tRPC backend
  * Should be done only once per backend!
  */
-const t = initTRPC.create();
+const t = initTRPC.create({
+  /**
+   * @see https://trpc.io/docs/v11/data-transformers
+   */
+  transformer: superjson, // Add superjson transformer
+});
 
 /**
  * Create a middleware that logs the request path.

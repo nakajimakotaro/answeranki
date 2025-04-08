@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { addDays, format, parseISO, differenceInDays, getDay, isWithinIntervali } from 'date-fns';
+import { addDays, format, parseISO, differenceInDays, getDay, isWithinInterval } from 'date-fns';
 import type { TimelineEvent as SharedTimelineEvent } from '@shared/types/timeline';
 import { getDailyDateRange, getYearlyDateRange } from '../config/scheduleConfig.js';
 
@@ -170,8 +170,14 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
 
   // イベントの描画
   const renderEvents = () => {
-    // dayWidth をここで取得
+    // dayWidth と totalHeight をここで取得
     const { eventHeight, eventMargin, headerHeight, dayWidth } = calculateChartDimensions();
+    // totalHeight を計算 (renderChart と同じロジック)
+    const totalHeight = Math.max(
+      containerHeight,
+      headerHeight + (events.length * (eventHeight + eventMargin)) + 20
+    );
+
 
     return events.map((event, index) => {
       // Ensure dates are valid before calculating positions
@@ -180,40 +186,85 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
         ? dateToX(addDays(event.endDate, 1)) // 終了日の翌日
         : dateToX(addDays(event.startDate, 1)); // 単一日イベントも1日分の幅を持たせる
 
-      const y = headerHeight + (index * (eventHeight + eventMargin));
       // Ensure width calculation is valid
       const width = Math.max(endX - startX, dayWidth);
-      const eventColor = '#E5E7EB'; // イベントバーの色を統一 (明るいグレー)
-      const textColor = '#374151'; // テキストの色を統一 (濃いグレー)
 
-      // 単一日イベントもバーで表示するように統一
-      return (
-        <g key={event.id.toString()} className="event-bar">
-          {/* バー */}
-          <rect
-            x={startX}
-            y={y}
-            width={width}
-            height={eventHeight}
-            rx={4}
-            fill={eventColor} // 統一した色を使用
-            // opacity={0.8} // Opacity を削除
-          />
-          {/* イベント名 */}
-          <text
-            x={startX + width / 2} // バーの中央に配置
-            y={y + eventHeight / 2 + 2} // 垂直中央揃え (微調整 +2px)
-            fontSize="12"
-            fill={textColor} // 統一したテキスト色を使用
-            dominantBaseline="middle"
-            textAnchor="middle" // 中央揃えにする
-          >
-            {event.title}
-          </text>
-        </g>
-      );
+      // イベントタイプに応じてスタイルを分岐
+      if (event.type === 'exam' || event.type === 'mock_exam') {
+        // 模試・試験日のスタイル
+        const examColor = '#9370db'; // 落ち着いた紫 (MediumPurple)
+        return (
+          <g key={event.id.toString()} className="event-exam-day">
+            <rect
+              x={startX}
+              y={headerHeight} // ヘッダー直下から開始
+              width={width}
+              height={totalHeight - headerHeight} // チャート下端まで
+              fill={examColor}
+              opacity={0.6} // 少し透明度を持たせる
+            />
+            <text
+               // x: バーの水平中央, y: バーの垂直中央に配置
+               x={startX + width / 2}
+               y={headerHeight + (totalHeight - headerHeight) / 2} // バーの垂直中央に配置
+               fontSize="12"
+               // fill="#374151" // 濃いグレーに変更 -> 白に戻し、影をつける
+               writingMode="tb" // 縦書きモード
+               textAnchor="middle" // 水平中央揃え
+               // dominantBaseline は削除済み
+            >
+              {/* Text shadow simulation: Draw dark text slightly offset */}
+              <tspan
+                x={startX + width / 2 + 1} // Offset slightly
+                y={headerHeight + (totalHeight - headerHeight) / 2 + 1} // Offset slightly (relative to center)
+                fill="rgba(0, 0, 0, 0.5)" // Semi-transparent black for shadow
+              >
+                {event.title}
+              </tspan>
+              {/* Main text */}
+              <tspan
+                x={startX + width / 2}
+                y={headerHeight + (totalHeight - headerHeight) / 2} // Positioned at center
+                fill="white" // White text
+              >
+                {event.title}
+              </tspan>
+            </text>
+          </g>
+        );
+      } else {
+        // 通常のスケジュールイベントのスタイル
+        const y = headerHeight + (index * (eventHeight + eventMargin)); // Y座標はインデックスに基づいて計算
+        const eventColor = '#E5E7EB'; // イベントバーの色 (明るいグレー)
+        const textColor = '#374151'; // テキストの色 (濃いグレー)
+
+        return (
+          <g key={event.id.toString()} className="event-bar">
+            {/* バー */}
+            <rect
+              x={startX}
+              y={y}
+              width={width}
+              height={eventHeight}
+              rx={4}
+              fill={eventColor}
+            />
+            {/* イベント名 */}
+            <text
+              x={startX + width / 2} // バーの中央に配置
+              y={y + eventHeight / 2 + 2} // 垂直中央揃え (微調整 +2px)
+              fontSize="12"
+              fill={textColor}
+              dominantBaseline="middle"
+              textAnchor="middle"
+            >
+              {event.title}
+            </text>
+          </g>
+        );
+      }
     });
-  };
+  }; // renderEvents 関数の正しい終了位置
 
   // 今日のマーカー描画 (縦線形式)
   const renderTodayMarker = () => {
@@ -226,6 +277,8 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
 
     // 今日が日付範囲内にあるかチェック
     const { startDate, endDate } = getDateRange();
+    // Note: getDateRange returns string dates, parseISO converts them to Date objects
+    // isWithinInterval expects Date objects for start and end
     if (!isWithinInterval(today, { start: parseISO(startDate), end: parseISO(endDate) })) {
       return null; // 範囲外なら何も描画しない
     }

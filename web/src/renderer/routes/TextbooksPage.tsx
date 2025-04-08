@@ -191,39 +191,33 @@ const TextbooksPage = () => {
 
   const openScheduleModal = (textbook: Textbook) => {
     setSelectedTextbookForSchedule(textbook);
-    // Use data from schedulesQuery
     const existingSchedule = schedulesQuery.data?.find(s => s.textbook_id === textbook.id);
     if (existingSchedule) {
       setEditingSchedule(existingSchedule);
-      setScheduleStartDate(existingSchedule.start_date); // Already string
-      setScheduleBufferDays(existingSchedule.buffer_days ?? 0); // Use default from schema if needed, but DB should handle it
-      setScheduleTotalProblems(existingSchedule.total_problems ?? undefined); // Match Zod optional
+      setScheduleStartDate(format(existingSchedule.start_date, 'yyyy-MM-dd'));
+      setScheduleBufferDays(existingSchedule.buffer_days ?? 0);
+      setScheduleTotalProblems(existingSchedule.total_problems ?? undefined);
 
-      // Handle weekday_goals: Parse if exists, otherwise fallback. Let parse errors propagate.
+      // Reset goals before attempting to parse/set
+      const initialGoal = existingSchedule.daily_goal ?? 0;
+      updateWeekdayGoalsFromPresets(initialGoal, initialGoal);
+      setScheduleWeekdayGoal(initialGoal);
+      setScheduleWeekendGoal(initialGoal);
+
       if (existingSchedule.weekday_goals) {
-        const weekdayData = JSON.parse(existingSchedule.weekday_goals); // Assume valid JSON from DB
-        // Basic validation (optional, but can prevent unexpected UI states if data is somehow malformed despite trust)
-        if (typeof weekdayData === 'object' && weekdayData !== null && [0,1,2,3,4,5,6].every(k => typeof weekdayData[k] === 'number')) {
-          setScheduleWeekdayGoals(weekdayData);
-          setScheduleWeekdayGoal(weekdayData[1] ?? 0);
-          setScheduleWeekendGoal(weekdayData[0] ?? 0);
-        } else {
-           // This case should ideally not happen with trusted data. Fallback as a safety net.
-           console.warn("Unexpected weekday_goals format from DB:", existingSchedule.weekday_goals);
-           const initialGoal = existingSchedule.daily_goal ?? 0;
-           updateWeekdayGoalsFromPresets(initialGoal, initialGoal);
-           setScheduleWeekdayGoal(initialGoal);
-           setScheduleWeekendGoal(initialGoal);
-        }
-      } else {
-        // Fallback if weekday_goals is null/undefined
-        const initialGoal = existingSchedule.daily_goal ?? 0;
-        updateWeekdayGoalsFromPresets(initialGoal, initialGoal);
-        setScheduleWeekdayGoal(initialGoal);
-        setScheduleWeekendGoal(initialGoal);
+        // Parse the JSON string. If parsing fails, an error will naturally occur and propagate.
+        const weekdayData = JSON.parse(existingSchedule.weekday_goals);
+        // Assume the parsed data has the correct structure.
+        // If not, accessing properties might result in `undefined` or errors, which is acceptable per Principle 6.
+        setScheduleWeekdayGoals(weekdayData);
+        setScheduleWeekdayGoal(weekdayData[1]); // Monday (or undefined if structure is wrong)
+        setScheduleWeekendGoal(weekdayData[0]); // Sunday (or undefined if structure is wrong)
       }
+      // If weekday_goals is null/empty, the initial goals based on daily_goal remain set.
     } else {
       setEditingSchedule(null);
+      // Reset all schedule fields for new schedule
+      // Reset all schedule fields for new schedule
       setScheduleStartDate('');
       setScheduleWeekdayGoal(undefined);
       setScheduleWeekendGoal(undefined);
@@ -254,10 +248,24 @@ const TextbooksPage = () => {
     }
     setError(null); // Clear local error state
 
-    const schedulePayload = {
+    // Convert date strings to Date objects before creating payload
+    let startDateObject: Date;
+    let endDateObject: Date;
+    try {
+        startDateObject = parseISO(scheduleStartDate);
+        endDateObject = parseISO(calculatedEndDate);
+        if (isNaN(startDateObject.getTime()) || isNaN(endDateObject.getTime())) {
+            throw new Error('Invalid date value');
+        }
+    } catch (error) {
+        setError('無効な日付形式です。yyyy-MM-dd形式で入力してください。');
+        return;
+    }
+
+    const schedulePayloadBase = {
       textbook_id: selectedTextbookForSchedule.id,
-      start_date: scheduleStartDate,
-      end_date: calculatedEndDate,
+      start_date: startDateObject, // Use Date object
+      end_date: endDateObject,     // Use Date object
       daily_goal: scheduleWeekdayGoal, // Keep for info, but weekday_goals is primary
       buffer_days: scheduleBufferDays,
       weekday_goals: JSON.stringify(scheduleWeekdayGoals),
@@ -266,9 +274,9 @@ const TextbooksPage = () => {
 
     if (editingSchedule && editingSchedule.id) {
       // Update existing schedule
-      const updatePayload: z.infer<typeof StudyScheduleUpdateSchema> = {
+      const updatePayload = {
         id: editingSchedule.id,
-        ...schedulePayload,
+        ...schedulePayloadBase, // Use payload with Date objects
       };
       // Validate with Zod before sending
       const validationResult = StudyScheduleUpdateSchema.safeParse(updatePayload);
@@ -280,7 +288,7 @@ const TextbooksPage = () => {
     } else {
       // Create new schedule
       // Validate with Zod before sending
-      const validationResult = StudyScheduleInputSchema.safeParse(schedulePayload);
+      const validationResult = StudyScheduleInputSchema.safeParse(schedulePayloadBase); // Use payload with Date objects
        if (!validationResult.success) {
         setError(`入力内容が無効です: ${validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
         return;
@@ -293,11 +301,13 @@ const TextbooksPage = () => {
   // Ankiデッキ紐付けモーダルを開く
   const openLinkModal = async (textbook: Textbook) => {
     setLinkingTextbook(textbook);
+    setError(null); // Clear previous UI errors if any
+    // Let potential errors from getDeckNames propagate up to React Query/global handlers.
     const decks = await ankiConnectService.getDeckNames();
     setDeckNames(decks);
-      setSelectedDeck(textbook.anki_deck_name || '');
-    setError(null);
+    setSelectedDeck(textbook.anki_deck_name || '');
     setIsLinkModalOpen(true);
+    // If getDeckNames fails, setIsLinkModalOpen(true) will not be reached.
   };
 
   // 参考書を保存
@@ -442,7 +452,7 @@ const TextbooksPage = () => {
                     {textbook.anki_deck_name || <span className="text-gray-400 italic">未設定</span>}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {schedule ? `${schedule.start_date} ~ ${schedule.end_date}` : <span className="text-gray-400 italic">未設定</span>}
+                    {schedule ? `${format(schedule.start_date, 'MM/dd')} ~ ${format(schedule.end_date, 'MM/dd')}` : <span className="text-gray-400 italic">未設定</span>}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">

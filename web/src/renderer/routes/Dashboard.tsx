@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
-import { format, parseISO, differenceInDays, startOfToday, isBefore, compareAsc } from 'date-fns';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { format, differenceInDays, startOfToday, isBefore, compareAsc } from 'date-fns';
 import DailyLogInput from '../components/DailyLogInput.js';
 import { Calendar, ChevronRight, BookOpen, GraduationCap, Clock } from 'lucide-react';
 import { trpc } from '../lib/trpc.js';
@@ -33,15 +34,14 @@ interface ExamCountdown {
 }
 
 const Dashboard = () => {
-  const [today] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [todayDate] = useState(startOfToday());
   const trpcUtils = trpc.useUtils();
 
-  // --- tRPC Queries ---
   const textbooksQuery = trpc.textbook.getTextbooks.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
   });
   const logsQuery = trpc.schedule.listLogs.useQuery(
-    { start_date: today, end_date: today },
+    { start_date: todayDate, end_date: todayDate },
     { staleTime: 60 * 1000 }
   );
   const examsQuery = trpc.exam.getAll.useQuery(undefined, {
@@ -109,11 +109,9 @@ const Dashboard = () => {
 
   // 受験日カウントダウンの計算
   const calculateExamCountdowns = (exams: ExamOutput[]) => {
-    const todayDate = startOfToday();
-
     const countdownData = exams
       .map(exam => {
-        const examDate = parseISO(exam.date);
+        const examDate = exam.date;
         if (isBefore(examDate, todayDate)) {
           return null;
         }
@@ -125,7 +123,7 @@ const Dashboard = () => {
           universityName: exam.name || '不明',
           examType: displayExamType,
           daysRemaining: diffDays,
-          examDate: exam.date,
+          examDate: format(examDate, 'yyyy-MM-dd'),
           parsedDate: examDate
         };
       })
@@ -137,7 +135,7 @@ const Dashboard = () => {
 
   // 学習ログの更新
   const handleLogUpdate = () => {
-    trpcUtils.schedule.listLogs.invalidate({ start_date: today, end_date: today });
+    trpcUtils.schedule.listLogs.invalidate({ start_date: todayDate, end_date: todayDate });
     trpcUtils.schedule.listLogs.invalidate();
   };
 
@@ -271,36 +269,35 @@ const Dashboard = () => {
         <div className="bg-white rounded-lg shadow p-4 dark:bg-gray-800">
           <DailyLogInput
             textbooks={textbooksQuery.data || []}
-            date={today}
+            date={todayDate}
             onLogUpdated={handleLogUpdate}
             existingLogs={logsQuery.data || []}
           />
         </div>
       </div>
       
-      {/* リンク */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <a 
-          href="/textbooks" 
+        <Link
+          to="/textbooks"
           className="bg-white rounded-lg shadow p-4 flex justify-between items-center hover:bg-gray-50"
         >
           <span className="font-semibold">参考書管理</span>
           <ChevronRight className="h-5 w-5 text-gray-400" />
-        </a>
-        <a 
-          href="/schedules" 
+        </Link>
+        <Link
+          to="/schedules"
           className="bg-white rounded-lg shadow p-4 flex justify-between items-center hover:bg-gray-50"
         >
           <span className="font-semibold">スケジュール管理</span>
           <ChevronRight className="h-5 w-5 text-gray-400" />
-        </a>
-        <a 
-          href="/universities" 
+        </Link>
+        <Link
+          to="/universities"
           className="bg-white rounded-lg shadow p-4 flex justify-between items-center hover:bg-gray-50"
         >
           <span className="font-semibold">志望校管理</span>
           <ChevronRight className="h-5 w-5 text-gray-400" />
-        </a>
+        </Link>
       </div>
     </div>
   );

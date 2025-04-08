@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { parseISO, compareAsc, isWithinInterval, startOfToday, differenceInDays, getYear, format, setMonth, setYear, isBefore } from 'date-fns';
+// Removed parseISO from main import as it should not be needed for tRPC Date objects
+import { compareAsc, isWithinInterval, startOfToday, differenceInDays, getYear, format, setMonth, setYear, isBefore, parseISO } from 'date-fns';
 import { trpc } from '../lib/trpc';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '../../../../server/src/router';
@@ -57,11 +58,11 @@ const TextbookStackedProgress = ({
       if (!rawTimelineEvents) return { schedules: [], exams: [] };
       const eventsToProcess = Array.isArray(rawTimelineEvents) ? rawTimelineEvents : [];
 
-      // Parse dates and filter/map
+      // Dates should already be Date objects due to superjson
       const processedEvents = eventsToProcess.map(event => ({
           ...event,
-          startDate: parseISO(event.startDate),
-          endDate: event.endDate ? parseISO(event.endDate) : undefined,
+          // startDate: parseISO(event.startDate), // Removed parseISO
+          // endDate: event.endDate ? parseISO(event.endDate) : undefined, // Removed parseISO
       }));
 
       const extractedSchedules: StudySchedule[] = processedEvents
@@ -102,17 +103,20 @@ const TextbookStackedProgress = ({
       });
     }
 
-    return [...filtered].sort((a, b) => compareAsc(parseISO(a.start_date), parseISO(b.start_date)));
+    // Sort using Date objects directly
+    return [...filtered].sort((a, b) => compareAsc(a.start_date, b.start_date));
   }, [schedules, textbooksData, selectedSubject]);
 
-  // Sort exams by date (trusting date format and existence from server)
+  // Sort exams by date (assuming date is a Date object)
   const sortedExams = useMemo(() => {
-    const validExams = exams.filter(exam => exam.date);
-    return [...validExams].sort((a, b) => compareAsc(parseISO(a.date!), parseISO(b.date!)));
+    const validExams = exams.filter(exam => exam.date instanceof Date); // Check if it's a Date object
+    // Sort using Date objects directly
+    return [...validExams].sort((a, b) => compareAsc(a.date!, b.date!));
   }, [exams]);
 
-  const isWithinDateRange = (dateString: string): boolean => {
-    const targetDate = parseISO(dateString);
+  // Function now accepts Date object
+  const isWithinDateRange = (targetDate: Date): boolean => {
+    // startDate and endDate are strings from props/defaults, need parsing here
     const start = parseISO(startDate);
     const end = parseISO(endDate);
     return isWithinInterval(targetDate, { start, end });
@@ -128,11 +132,11 @@ const TextbookStackedProgress = ({
     return (progress.progress.solvedProblems / textbook.total_problems) * 100;
   };
 
-  // Calculate planned progress percentage
+  // Calculate planned progress percentage using Date objects
   const calculatePlannedProgress = (schedule: StudySchedule): number => {
     const today = startOfToday();
-    const start = parseISO(schedule.start_date);
-    const end = parseISO(schedule.end_date);
+    const start = schedule.start_date; // Already Date object
+    const end = schedule.end_date;     // Already Date object
 
     const totalDurationDays = differenceInDays(end, start);
     if (totalDurationDays < 0) return 0;
@@ -225,7 +229,8 @@ const TextbookStackedProgress = ({
           試験日程 (期間内)
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          {sortedExams.filter(exam => isWithinDateRange(exam.date!)).map((exam, index) => (
+          {/* Pass Date object directly to isWithinDateRange */}
+          {sortedExams.filter(exam => exam.date && isWithinDateRange(exam.date)).map((exam, index) => (
             <div key={exam.id ?? index} className="flex items-center p-2 rounded-md border border-gray-200">
               <div className={`w-3 h-3 ${getExamTypeColor(exam)} rounded-full mr-2 flex-shrink-0`}></div>
               <div>
@@ -233,12 +238,14 @@ const TextbookStackedProgress = ({
                   {exam.is_mock ? exam.name : (exam.university_name ? `${exam.university_name} ${exam.name}` : exam.name)}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {exam.is_mock ? '模試' : '本番'} - {format(parseISO(exam.date!), 'yyyy/MM/dd')}
+                  {/* Format Date object directly */}
+                  {exam.is_mock ? '模試' : '本番'} - {exam.date ? format(exam.date, 'yyyy/MM/dd') : '-'}
                 </div>
               </div>
             </div>
           ))}
-          {sortedExams.filter(exam => isWithinDateRange(exam.date!)).length === 0 && (
+          {/* Pass Date object directly to isWithinDateRange */}
+          {sortedExams.filter(exam => exam.date && isWithinDateRange(exam.date)).length === 0 && (
             <div className="text-sm text-gray-500 col-span-full">期間内に表示する試験日程がありません</div>
           )}
         </div>
@@ -274,9 +281,9 @@ const TextbookStackedProgress = ({
                       {status.status}
                     </div>
                   </div>
-                  {/* Schedule Dates */}
+                  {/* Schedule Dates (Format Date objects directly) */}
                   <div className="text-xs text-gray-500 mb-2">
-                    期間: {format(parseISO(schedule.start_date), 'yyyy/MM/dd')} 〜 {format(parseISO(schedule.end_date), 'yyyy/MM/dd')}
+                    期間: {format(schedule.start_date, 'yyyy/MM/dd')} 〜 {format(schedule.end_date, 'yyyy/MM/dd')}
                   </div>
                   {/* Progress Bar */}
                   <div className="relative h-8 bg-gray-100 rounded-md overflow-hidden group">

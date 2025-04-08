@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { format, parse, parseISO, compareAsc } from 'date-fns';
+import { format, parseISO, compareAsc } from 'date-fns';
+import { z } from 'zod';
 import {
   Plus,
   Edit,
@@ -12,78 +13,57 @@ import {
   Building
 } from 'lucide-react';
 
-// import { useExams } from '../hooks'; // Removed old hook
-// import { Exam, ExamInput, ExamFormatType } from '../types/exam'; // Removed old types
 import ExamSubjectScores from '../components/ExamSubjectScores.js';
 import { trpc } from '../lib/trpc.js'; // Import tRPC client
-// Temporary type for AppRouter to avoid direct server import
+import { ExamSchema, ExamInputSchema, ExamUpdateSchema } from '@answeranki/shared/types/exam';
+import type { inferRouterOutputs } from '@trpc/server';
 type AppRouter = any;
-import { inferRouterOutputs } from '@trpc/server';
 
-// Infer types from router (will be 'any' due to AppRouter being 'any')
-// This is temporary until proper type sharing is set up
+// Infer types from router
 type RouterOutput = inferRouterOutputs<AppRouter>;
-// Manually define Exam and ExamInput types based on expected data structure for now
-interface Exam {
-  id: number;
-  name: string;
-  date: string;
-  is_mock: boolean;
-  exam_type: string;
-  university_id?: number | null;
-  notes?: string | null;
-  // Add other fields if necessary based on usage, e.g., university_name
-  university_name?: string | null;
-}
-interface ExamInput {
-  name: string;
-  date: string;
-  is_mock: boolean;
-  exam_type: string;
-  university_id?: number | null;
-  notes?: string | null;
-}
+type Exam = z.infer<typeof ExamSchema>;
+type ExamOutput = RouterOutput['exam']['getAll'][number];
+type ExamInput = z.infer<typeof ExamInputSchema>;
+type ExamUpdateInput = z.infer<typeof ExamUpdateSchema>;
 
 
 /**
  * 試験管理ページ (模試・本番)
  */
 const ExamsPage = () => {
-  // tRPC hooks
   const utils = trpc.useUtils();
-  const examsQuery = trpc.exam.getAll.useQuery(undefined, { // Changed getExams to getAll
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  const examsQuery = trpc.exam.getAll.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
   });
-  const createExamMutation = trpc.exam.create.useMutation({ // Changed createExam to create
+  const createExamMutation = trpc.exam.create.useMutation({
     onSuccess: () => {
-      utils.exam.getAll.invalidate(); // Changed getExams to getAll
+      utils.exam.getAll.invalidate();
       resetForm();
-      setMutationError(null); // Clear previous errors
+      setMutationError(null);
     },
     onError: (err) => {
       console.error("Error creating exam:", err);
       setMutationError(`試験の作成中にエラーが発生しました: ${err.message}`);
     }
   });
-  const updateExamMutation = trpc.exam.update.useMutation({ // Changed updateExam to update
+  const updateExamMutation = trpc.exam.update.useMutation({
     onSuccess: () => {
-      utils.exam.getAll.invalidate(); // Changed getExams to getAll
+      utils.exam.getAll.invalidate();
       resetForm();
-      setMutationError(null); // Clear previous errors
+      setMutationError(null);
     },
      onError: (err) => {
       console.error("Error updating exam:", err);
       setMutationError(`試験の更新中にエラーが発生しました: ${err.message}`);
     }
   });
-  const deleteExamMutation = trpc.exam.delete.useMutation({ // Changed deleteExam to delete
+  const deleteExamMutation = trpc.exam.delete.useMutation({
     onSuccess: (_, variables) => {
-      utils.exam.getAll.invalidate(); // Changed getExams to getAll
-      // Close expansion if the deleted exam was expanded
+      utils.exam.getAll.invalidate();
       if (expandedExamId === variables.id) {
         setExpandedExamId(null);
       }
-      setMutationError(null); // Clear previous errors
+      setMutationError(null);
     },
     onError: (err) => {
       console.error("Error deleting exam:", err);
@@ -95,8 +75,8 @@ const ExamsPage = () => {
   const [mutationError, setMutationError] = useState<string | null>(null); // For mutation errors
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
-  const [formData, setFormData] = useState<ExamInput>({
+  const [selectedExam, setSelectedExam] = useState<ExamOutput | null>(null);
+  const [formData, setFormData] = useState<Omit<ExamInput, 'date'> & { date: string }>({
     name: '',
     date: format(new Date(), 'yyyy-MM-dd'),
     is_mock: false,
@@ -125,11 +105,11 @@ const ExamsPage = () => {
   };
 
   // 試験の編集を開始
-  const handleEditExam = (exam: Exam) => {
+  const handleEditExam = (exam: ExamOutput) => {
     setSelectedExam(exam);
     setFormData({
       name: exam.name,
-      date: exam.date,
+      date: format(exam.date, 'yyyy-MM-dd'),
       is_mock: exam.is_mock,
       exam_type: exam.exam_type,
       university_id: exam.university_id,
@@ -137,27 +117,26 @@ const ExamsPage = () => {
     });
     setFormMode('edit');
     setShowForm(true);
-    setMutationError(null); // Clear errors when opening edit form
+    setMutationError(null);
   };
 
   // 試験の削除 (Uses tRPC mutation)
   const handleDeleteExam = (examId: number) => {
     if (window.confirm('この試験を削除してもよろしいですか？関連する点数データもすべて削除されます。')) {
-      setMutationError(null); // Clear previous errors
+      setMutationError(null);
       deleteExamMutation.mutate({ id: examId });
     }
-    // onSuccess handler in mutation takes care of UI updates
   };
 
-  // 試験の保存（作成または更新） (Uses tRPC mutation)
+  // 試験の保存（作成または更新）
   const handleSaveExam = (e: React.FormEvent) => {
     e.preventDefault();
-    setMutationError(null); // Clear previous errors
+    setMutationError(null);
 
     // --- Frontend Validation ---
     if (!formData.name || formData.name.trim() === '') {
        setMutationError('試験名は必須です。');
-      return; // Prevent form submission
+      return;
     }
      if (!formData.date) {
        setMutationError('実施日は必須です。');
@@ -169,18 +148,54 @@ const ExamsPage = () => {
      }
     // --- End Validation ---
 
-    if (formMode === 'create') {
-      createExamMutation.mutate(formData);
-    } else if (formMode === 'edit' && selectedExam) {
-      // Ensure university_id is passed correctly (null if empty string or invalid)
-      const dataToUpdate = {
-          ...formData,
-          university_id: formData.university_id ? Number(formData.university_id) : null,
-          id: selectedExam.id
-      };
-      updateExamMutation.mutate(dataToUpdate);
+    // Convert date string from form back to Date object for mutation
+    let dateObject: Date;
+    try {
+        dateObject = parseISO(formData.date);
+        if (isNaN(dateObject.getTime())) {
+            throw new Error('Invalid date value');
+        }
+    } catch (error) {
+        setMutationError('無効な日付形式です。yyyy-MM-dd形式で入力してください。');
+        return;
     }
-    // onSuccess handler in mutation takes care of resetting form
+
+
+    const mutationPayloadBase = {
+        ...formData,
+        date: dateObject,
+        university_id: formData.university_id ? Number(formData.university_id) : null,
+    };
+
+    if (formMode === 'create') {
+        try {
+            const validatedPayload = ExamInputSchema.parse(mutationPayloadBase);
+            createExamMutation.mutate(validatedPayload);
+        } catch (error) {
+             if (error instanceof z.ZodError) {
+                setMutationError(`入力エラー: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
+            } else {
+                setMutationError('予期せぬ検証エラーが発生しました。');
+                console.error("Unexpected validation error:", error);
+            }
+        }
+    } else if (formMode === 'edit' && selectedExam) {
+        const updatePayload = {
+            ...mutationPayloadBase,
+            id: selectedExam.id
+        };
+        try {
+            const validatedPayload = ExamUpdateSchema.parse(updatePayload);
+            updateExamMutation.mutate(validatedPayload);
+        } catch (error) {
+             if (error instanceof z.ZodError) {
+                setMutationError(`入力エラー: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
+            } else {
+                setMutationError('予期せぬ検証エラーが発生しました。');
+                console.error("Unexpected validation error:", error);
+            }
+        }
+    }
   };
 
   // 試験の展開/折りたたみを切り替え
@@ -189,18 +204,18 @@ const ExamsPage = () => {
       setExpandedExamId(null);
     } else {
       setExpandedExamId(examId);
-      // Note: Score fetching is now handled within ExamSubjectScores component
     }
   };
 
   // 日付をフォーマット
-  // Assume dateString from DB is a valid 'yyyy-MM-dd' string
-  const formatDate = (dateString: string) => {
-     const date = parse(dateString, 'yyyy-MM-dd', new Date());
+  const formatDate = (date: Date) => {
+     if (!(date instanceof Date) || isNaN(date.getTime())) {
+       return '無効な日付';
+     }
      return format(date, 'yyyy年M月d日');
   };
 
-  // エラーメッセージを表示 (Handles both query and mutation errors)
+  // エラーメッセージを表示
   const renderError = () => {
     const queryError = examsQuery.error;
     const errorToShow = mutationError || (queryError ? `データの取得エラー: ${queryError.message}` : null);
@@ -387,11 +402,8 @@ const ExamsPage = () => {
              試験データがありません。「新規試験」ボタンから登録してください。
            </div>
         ) : (
-          // Sort exams by date, ascending (oldest first) using date-fns
           [...(examsQuery.data || [])].sort((a, b) => {
-              const dateA = parse(a.date, 'yyyy-MM-dd', new Date());
-              const dateB = parse(b.date, 'yyyy-MM-dd', new Date());
-              return compareAsc(dateA, dateB);
+              return compareAsc(a.date, b.date);
           }).map((exam) => (
             <div key={exam.id} className="card border rounded-lg shadow-sm overflow-hidden">
               {/* 試験ヘッダー */}
