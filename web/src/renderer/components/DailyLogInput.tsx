@@ -1,24 +1,19 @@
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns'; // Import format function
-// Import StudyLog type from shared schema definitions
-import type { StudyLog } from '@shared/schemas/schedule'; // This type now uses Date objects
-import { trpc } from '../lib/trpc.js'; // Import tRPC client
-import type { inferRouterOutputs } from '@trpc/server'; // Import helper type
-// Adjust the path to your AppRouter definition if necessary
+import { format } from 'date-fns';
+import type { StudyLog } from '@shared/schemas/schedule';
+import { trpc } from '../lib/trpc.js';
+import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '../../../../server/src/router';
 
-// Infer the output type for the getTextbooks procedure
 type RouterOutput = inferRouterOutputs<AppRouter>;
-// Correct path based on the router definition
 type TextbookOutput = RouterOutput['textbook']['getTextbooks'][number];
 
 
-// コンポーネントのプロパティ型定義
 export interface DailyLogInputProps {
-  textbooks: TextbookOutput[]; // Use inferred Textbook type
-  date: Date; // Changed prop type from string to Date
+  textbooks: TextbookOutput[];
+  date: Date;
   onLogUpdated: () => void;
-  existingLogs: StudyLog[]; // This type now uses Date objects
+  existingLogs: StudyLog[];
 }
 
 const DailyLogInput: React.FC<DailyLogInputProps> = ({
@@ -28,7 +23,7 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
   existingLogs = []
 }) => {
   // 状態管理
-  const [selectedTextbook, setSelectedTextbook] = useState<TextbookOutput | null>(null); // Use inferred type
+  const [selectedTextbook, setSelectedTextbook] = useState<TextbookOutput | null>(null);
   const [actualAmount, setActualAmount] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -42,31 +37,26 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
       setNotes('');
       setExistingLog(null);
       setValidationError(null);
-      // Keep success message briefly? Or clear immediately? Clearing for now.
-      // setSuccess(null);
   };
 
-  // tRPC Mutations
-  const utils = trpc.useUtils(); // For potential cache invalidation
+  const utils = trpc.useUtils();
 
   const createLogMutation = trpc.schedule.createLog.useMutation({
     onSuccess: () => {
       setSuccess('学習ログを保存しました');
-      onLogUpdated(); // Notify parent
-      utils.schedule.listLogs.invalidate(); // Invalidate log list query cache
+      onLogUpdated(); // 親コンポーネントに更新を通知
+      utils.schedule.listLogs.invalidate(); // キャッシュを無効化
       resetForm();
-      setTimeout(() => setSuccess(null), 3000); // Clear success message after 3s
+      setTimeout(() => setSuccess(null), 3000); // 3秒後に成功メッセージをクリア
     },
   });
 
   const updateLogMutation = trpc.schedule.updateLog.useMutation({
     onSuccess: () => {
       setSuccess('学習ログを更新しました');
-      onLogUpdated(); // Notify parent
-      utils.schedule.listLogs.invalidate(); // Invalidate log list query cache
-      // Decide if form should reset after update, maybe just clear success/error
-      // resetForm();
-      setTimeout(() => setSuccess(null), 3000); // Clear success message after 3s
+      onLogUpdated(); // 親コンポーネントに更新を通知
+      utils.schedule.listLogs.invalidate(); // キャッシュを無効化
+      setTimeout(() => setSuccess(null), 3000); // 3秒後に成功メッセージをクリア
     },
   });
 
@@ -76,7 +66,6 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
     setValidationError(null);
     setSuccess(null);
     if (selectedTextbook && selectedTextbook.id) {
-      // 既存のログを検索
       const log = existingLogs.find(l => l.textbook_id === selectedTextbook.id);
 
       if (log) {
@@ -103,9 +92,8 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
     setValidationError(null);
     setSuccess(null);
 
-    // Pass the Date object directly. The input schema uses z.coerce.date().
     const logInputData = {
-        date, // Pass the Date object received via props
+        date,
         textbook_id: selectedTextbook.id,
         actual_amount: actualAmount,
         notes: notes || undefined,
@@ -118,12 +106,10 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
             ...logInputData
         });
       } else {
-        // 新しいログを作成
         await createLogMutation.mutateAsync(logInputData);
     }
   };
 
-  // Determine loading state from either mutation (use isPending for TanStack Query v5+)
   const isPending = createLogMutation.isPending || updateLogMutation.isPending;
 
   return (
@@ -134,7 +120,7 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
         </div>
       )}
 
-      {/* Display mutation success */}
+      {/* 保存・更新成功メッセージ */}
       {success && (
         <div className="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
           {success}
@@ -156,10 +142,9 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
                 const selected = textbooks.find(t => t.id === id) || null;
                 setSelectedTextbook(selected);
               }}
-              disabled={isPending} // Use mutation pending state
+              disabled={isPending}
             >
               <option value="">参考書を選択してください</option>
-              {/* Ensure textbook object matches the expected Textbook type */}
               {textbooks.map((textbook) => (
                 <option key={textbook.id} value={textbook.id}>
                   {textbook.title} ({textbook.subject})
@@ -176,7 +161,7 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
             <input
               type="text"
               className="w-full p-2 border border-gray-300 rounded-md bg-gray-100"
-              value={format(date, 'yyyy-MM-dd')} // Format Date for display
+              value={format(date, 'yyyy-MM-dd')}
               disabled
             />
           </div>
@@ -194,7 +179,7 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
               value={actualAmount}
               onChange={(e) => setActualAmount(Number(e.target.value))}
               min={0}
-              disabled={isPending} // Use mutation pending state
+              disabled={isPending}
             />
           </div>
         </div>
@@ -209,7 +194,7 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            disabled={isPending} // Use mutation pending state
+            disabled={isPending}
           />
         </div>
 
@@ -218,7 +203,7 @@ const DailyLogInput: React.FC<DailyLogInputProps> = ({
           <button
             type="submit"
             className={`px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary ${isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-            disabled={isPending} // Use mutation pending state
+            disabled={isPending}
           >
             {isPending ? (
               <span className="flex items-center">

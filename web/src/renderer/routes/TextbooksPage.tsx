@@ -29,10 +29,6 @@ const TextbooksPage = () => {
   const createTextbookMutation = trpc.textbook.createTextbook.useMutation({
     onSuccess: (newTextbook) => {
       utils.textbook.getTextbooks.invalidate(); // Invalidate cache on success
-      // Optionally update the cache directly
-      // utils.textbook.getTextbooks.setData(undefined, (oldData) =>
-      //   oldData ? [...oldData, newTextbook] : [newTextbook]
-      // );
       setIsModalOpen(false);
       setEditingTextbook(null);
       setError(null); // Clear previous errors
@@ -45,10 +41,6 @@ const TextbooksPage = () => {
   const updateTextbookMutation = trpc.textbook.updateTextbook.useMutation({
      onSuccess: (updatedTextbook) => {
       utils.textbook.getTextbooks.invalidate();
-      // Optionally update the cache directly
-      // utils.textbook.getTextbooks.setData(undefined, (oldData) =>
-      //   oldData?.map((tb) => (tb.id === updatedTextbook.id ? updatedTextbook : tb))
-      // );
       setIsModalOpen(false);
       setEditingTextbook(null);
       setError(null); // Clear previous errors
@@ -216,7 +208,6 @@ const TextbooksPage = () => {
       // If weekday_goals is null/empty, the initial goals based on daily_goal remain set.
     } else {
       setEditingSchedule(null);
-      // Reset all schedule fields for new schedule
       // Reset all schedule fields for new schedule
       setScheduleStartDate('');
       setScheduleWeekdayGoal(undefined);

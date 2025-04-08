@@ -4,28 +4,16 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { publicProcedure, router } from '../trpc.js';
 import prisma from '../db/prisma.js';
 import {
-  ExamSchema, // Keep only one
+  ExamSchema,
   ExamScoreSchema,
   SubjectScoreSchema,
-  ExamInputSchema, // Import the new input schema
+  ExamInputSchema,
   type Exam,
   type ExamScore,
   type SubjectScore,
 } from '@answeranki/shared/types/exam';
 
-// Remove local CreateExamInputSchema
-/*
-const CreateExamInputSchema = z.object({
-  name: z.string().min(1, 'Exam name is required'),
-  date: z.string().min(1, 'Exam date is required'),
-  is_mock: z.boolean(),
-  exam_type: z.string().min(1),
-  university_id: z.number().int().nullable().optional(),
-  notes: z.string().nullable().optional(),
-});
-*/
 
-// Update UpdateExamInputSchema to extend the imported schema
 const UpdateExamInputSchema = ExamInputSchema.extend({
   id: z.number().int(),
 });
@@ -47,21 +35,23 @@ const UpsertSubjectScoreInputSchema = z.object({
     max_score: z.number().nullable().optional(),
 });
 
+// Define the missing schema for batch items
 const BatchSubjectScoreItemSchema = z.object({
     exam_type: z.string().min(1),
     subject: z.string().min(1),
     score: z.number().nullable().optional(),
     max_score: z.number().nullable().optional(),
 });
+
 const BatchUpsertSubjectScoresInputSchema = z.object({
     examId: z.number().int(),
-    scores: z.array(BatchSubjectScoreItemSchema),
+    scores: z.array(BatchSubjectScoreItemSchema), // Use the defined schema
 });
 
-// Update ExamScoreWithExamDetailsSchema to use z.date()
+// Keep only one definition of ExamScoreWithExamDetailsSchema
 const ExamScoreWithExamDetailsSchema = ExamScoreSchema.extend({
   exam_name: z.string(),
-  exam_date: z.date().nullable().optional(), // Changed from z.string()
+  exam_date: z.date().nullable().optional(),
   is_mock: z.boolean(),
 });
 
@@ -91,14 +81,13 @@ export const examRouter = router({
     }),
 
   create: publicProcedure
-    .input(ExamInputSchema) // Use imported schema
+    .input(ExamInputSchema)
     .mutation(async ({ input }) => {
-      // input.date is now a Date object due to ExamInputSchema using z.coerce.date()
       const { name, date, is_mock, exam_type, university_id, notes } = input;
       const newExam = await prisma.exams.create({
         data: {
           name,
-          date: date, // Pass Date object directly
+          date: date,
           is_mock,
           exam_type,
           university_id: university_id ?? null,
@@ -109,15 +98,14 @@ export const examRouter = router({
     }),
 
   update: publicProcedure
-    .input(UpdateExamInputSchema) // Uses the extended schema
+    .input(UpdateExamInputSchema)
     .mutation(async ({ input }) => {
-      // input.date is now a Date object
       const { id, name, date, is_mock, exam_type, university_id, notes } = input;
       const updatedExam = await prisma.exams.update({
         where: { id },
         data: {
             name,
-            date: date, // Pass Date object directly
+            date: date,
             is_mock,
             exam_type,
             university_id: university_id ?? null,
@@ -160,9 +148,8 @@ export const examRouter = router({
 
         let savedScore;
         if (existingScore) {
-            // Update existing score
             savedScore = await prisma.exam_scores.update({
-                where: { id: existingScore.id }, // Update by primary key 'id'
+                where: { id: existingScore.id },
                 data: {
                     descriptive_score: descriptive_score ?? null,
                     multiple_choice_score: multiple_choice_score ?? null,
@@ -171,7 +158,6 @@ export const examRouter = router({
                 },
             });
         } else {
-            // Create new score if not found
             savedScore = await prisma.exam_scores.create({
                 data: {
                     exams: { connect: { id: exam_id } },
@@ -229,8 +215,6 @@ export const examRouter = router({
             max_score: max_score ?? null,
           },
         });
-      // Zod parsing errors will propagate
-      // Prisma errors (like P2003, P2025) will propagate
       return SubjectScoreSchema.parse(savedScore);
     }),
 
@@ -260,7 +244,7 @@ export const examRouter = router({
                             max_score: max_score ?? null,
                         },
                         create: {
-                            exams: { connect: { id: examId } }, // Connect inside transaction
+                            exams: { connect: { id: examId } },
                             exam_type: exam_type,
                             subject: subject,
                             score: score ?? null,
@@ -312,11 +296,10 @@ export const examRouter = router({
       const transformedScores = scoresData.map((score: ScoreWithExam) => ({
         ...score,
         exam_name: score.exams.name,
-        exam_date: score.exams.date, // Pass Date object directly
+        exam_date: score.exams.date,
         is_mock: score.exams.is_mock,
       }));
 
-      // Zod parsing errors will propagate
       return z.array(ExamScoreWithExamDetailsSchema).parse(transformedScores);
     }),
 

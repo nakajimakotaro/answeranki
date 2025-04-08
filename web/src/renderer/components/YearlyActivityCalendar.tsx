@@ -36,7 +36,6 @@ const YearlyActivityCalendar = ({
     const yearlyLogAmountsMap: Record<string, number> = {};
     // Check if yearlyLogsArray exists before iterating
     if (yearlyLogsArray) {
-      // Remove explicit type annotation, let TS infer from useQuery (should be Date)
       yearlyLogsArray.forEach((log) => {
         // Ensure log.date is a valid Date object before formatting (safeguard)
         if (log.date instanceof Date && !isNaN(log.date.getTime())) {
