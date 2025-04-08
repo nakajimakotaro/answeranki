@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Settings, FileText, List, BookOpen, Calendar, GraduationCap, BarChart, FileCheck } from 'lucide-react';
+import { FileText, List, BookOpen, Calendar, GraduationCap, BarChart, FileCheck } from 'lucide-react';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -78,15 +78,6 @@ const Sidebar = () => {
             >
               <FileCheck className="w-5 h-5 mr-3" />
               <span>試験管理</span>
-            </Link>
-          </li>
-          <li>
-            <Link 
-              to="/settings" 
-              className={`flex items-center p-2 rounded-md ${isActive('/settings')}`}
-            >
-              <Settings className="w-5 h-5 mr-3" />
-              <span>設定</span>
             </Link>
           </li>
         </ul>

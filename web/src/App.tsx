@@ -10,7 +10,6 @@ import { ErrorProvider, useError } from './renderer/context/ErrorContext.js';
 import { trpc } from './renderer/lib/trpc.js';
 import superjson from 'superjson';
 import ProblemDetail from './renderer/routes/ProblemDetail.js';
-import Settings from './renderer/routes/Settings.js';
 import ProblemList from './renderer/routes/ProblemList.js';
 import ProblemView from './renderer/components/ProblemView.js';
 import Dashboard from './renderer/routes/Dashboard.js';
@@ -46,7 +45,6 @@ function AppContent() {
           <Route path="universities" element={<UniversitiesPage />} />
           <Route path="schedules" element={<SchedulesPage />} />
           <Route path="exams" element={<ExamsPage />} />
-          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </Router>
