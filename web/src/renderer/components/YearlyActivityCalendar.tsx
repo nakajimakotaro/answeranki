@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react';
-import { getYear, getDaysInYear, startOfYear, getDay, addDays, format, getDate, getMonth } from 'date-fns'; // Import date-fns functions, removed parseISO as it's not used directly here anymore
-import { trpc, rawTrpcClient } from '../lib/trpc.js'; // Import tRPC client
-import { Calendar, Filter, BarChart2 } from 'lucide-react'; // Removed BookOpen as filter/stats are removed
-import { raw } from 'express';
+import { getYear, getDaysInYear, startOfYear, getDay, addDays, format, getDate, getMonth } from 'date-fns';
+import { trpc, rawTrpcClient } from '../lib/trpc.js';
+import { Calendar, Filter, BarChart2 } from 'lucide-react';
 
 interface YearlyActivityCalendarProps {
   year?: number;
@@ -250,8 +249,6 @@ const YearlyActivityCalendar = ({
           <span>多い</span>
         </div>
       </div>
-
-      {/* Statistics UI removed */}
 
     </div>
   );

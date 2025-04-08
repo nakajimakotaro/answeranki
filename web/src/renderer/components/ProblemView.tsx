@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { parse, compareDesc } from 'date-fns';
 import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Scan, Maximize, XCircle, Play, Pause, StopCircle, Clock } from 'lucide-react';
 import { useNotes, useAnkiConnect, useMediaFiles } from '../hooks/index.js';
-// MockExamScoresList import removed
 import { NoteInfo } from '../types/ankiConnect.js';
 import scansnap, { COLOR_MODE, COMPRESSION, FORMAT, SCAN_MODE, SCANNING_SIDE } from '../../scansnap.js';
 import { nanoid } from 'nanoid';
@@ -50,12 +49,10 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  // saveError state removed
 
   // スキャナー関連の状態
   const [isScanning, setIsScanning] = useState(false);
   const [scannerInitialized, setScannerInitialized] = useState(false);
-  // scannerError state removed
 
   // パネル表示制御用の状態
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
@@ -149,22 +146,17 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   // スキャナーの初期化
   useEffect(() => {
     const initializeScanner = async () => {
-      // Removed try...catch and setScannerError
       const result = await scansnap.initialize();
       setScannerInitialized(result === 0);
       if (result !== 0) {
-        // Let potential errors propagate if needed, or handle differently
         console.error('Scanner initialization failed with code:', result);
-        // Throw error to be caught by GlobalErrorBoundary
         throw new Error(`Scanner initialization failed with code: ${result}`);
       }
     };
 
     initializeScanner().catch(err => {
-      // Catch errors from the async function itself (e.g., if scansnap.initialize throws)
       console.error('Error during scanner initialization:', err);
       setScannerInitialized(false);
-      // Re-throw to GlobalErrorBoundary
       throw err;
     });
 
@@ -181,9 +173,8 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
 
     scansnap.on('scanFinish', async (fileIds: string[]) => {
       setIsScanning(true);
-      // scannerError state removed
 
-      try { // Add try...catch for async operations within the handler
+      try {
         const scanPromises = fileIds.map(async (fileId) => {
           const fileInfo = await scansnap.getBlobData(fileId); // Let errors propagate
           const blob = new Blob([fileInfo], { type: 'image/jpeg' });
@@ -227,9 +218,8 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
     }
 
     setIsScanning(true);
-    // scannerError state removed
 
-    try { // Keep try...finally for resetting state
+    try {
       // スキャン設定
       scansnap.state.format = FORMAT.JPEG;
       scansnap.state.colorMode = COLOR_MODE.COLOR;
@@ -366,27 +356,22 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   const handleSave = async () => {
     if (!problemData) {
       console.error('Attempted to save without problem data.');
-      // Optionally provide non-error feedback or disable button
       return;
     }
     if (images.length === 0 && !memo.trim() && !solvingTime && !reviewTime) {
       console.warn('Attempted to save with no content.');
-      // Optionally provide non-error feedback or disable button
       return;
     }
 
     setSaving(true);
-    // saveError state removed
 
-    try { // Keep try...finally to ensure setSaving(false) runs
+    try {
       let imageFilenames = '';
 
       if (images.length > 0) {
-        // Let errors from uploadImage propagate
         const uploadPromises = images.map(image => uploadImage(image, undefined, true));
         const uploadResults = await Promise.all(uploadPromises);
 
-        // Basic check if needed, assuming uploadImage throws on failure
         const successfulUploads = uploadResults.filter(result => result.success);
         if (successfulUploads.length !== images.length) {
            throw new Error('One or more images failed to upload.');
@@ -455,7 +440,6 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
     );
   };
 
-  // renderError function removed
 
   return (
     <div className="container mx-auto">
@@ -536,8 +520,6 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
         </div>
       )}
 
-      {/* Removed renderError calls */}
-
       {/* パネル表示切り替えボタン */}
       <div className="flex gap-2 mb-4">
         <button
@@ -610,8 +592,6 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                   <span className="text-gray-600">（分:秒）</span>
                 </div>
               </div>
-
-              {/* Removed scannerError display */}
 
               {/* スキャンボタン */}
               <div className="mb-4 flex justify-center">
@@ -742,8 +722,6 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                 />
               </div>
 
-              {/* Removed saveError display */}
-
               {/* 保存成功メッセージ */}
               {saveSuccess && (
                 <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
@@ -866,8 +844,6 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                   )}
                 </div>
               )}
-
-              {/* MockExamScoresList removed */}
             </div>
           )}
         </div>

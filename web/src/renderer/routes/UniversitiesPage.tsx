@@ -1,83 +1,62 @@
-import { useState, useEffect, useMemo } from 'react'; // Add useMemo
-// Import format from date-fns
+import { useState, useEffect, useMemo } from 'react';
 import { parseISO, differenceInDays, startOfToday, isBefore, format } from 'date-fns';
-import { trpc } from '../lib/trpc'; // Import tRPC hook - Removed .js
-// import { examService } from '../services/examService'; // Removed examService import
-import type { Exam, ExamInput } from '@shared/types/exam'; // Removed .js extension
-// TimelineEvent import might not be needed if exam query returns Exam[] directly
-// UniversityExamType might still be used for the dropdown, keep it for now or replace if needed
-import type { UniversityExamType } from '../types/schedule'; // Removed .js extension
+import { trpc } from '../lib/trpc';
+import type { Exam, ExamInput } from '@shared/types/exam';
+import type { UniversityExamType } from '../types/schedule';
 import { GraduationCap, Plus, Edit, Trash, Calendar } from 'lucide-react';
-import type { inferRouterOutputs } from '@trpc/server'; // Import helper type
-// Import AppRouter using the path alias
-import type { AppRouter } from '@server/router'; // Removed .js extension
+import type { inferRouterOutputs } from '@trpc/server';
+import type { AppRouter } from '@server/router';
 
-// Infer the output types using AppRouter
-type RouterOutput = inferRouterOutputs<AppRouter>; // Use AppRouter for inference
-type University = RouterOutput['university']['getAll'][number]; // Correctly infer University type
-// Infer Exam type from tRPC output (assuming getAll returns the base Exam type)
-// Assuming exam.date from the server is Date type
+type RouterOutput = inferRouterOutputs<AppRouter>;
+type University = RouterOutput['university']['getAll'][number];
 type ExamOutput = Omit<RouterOutput['exam']['getAll'][number], 'date'> & { date: Date | null };
 
-// Define a type for Exam with the optional university_name added in the component
 type ExamWithUniName = ExamOutput & { university_name?: string };
 
 const UniversitiesPage = () => {
-  // tRPC Query for Universities
-  const utils = trpc.useUtils(); // Get tRPC utils for invalidation
+  const utils = trpc.useUtils();
   const { data: universities = [], isLoading: isLoadingUniversities, error: universityError } = trpc.university.getAll.useQuery();
 
-  // tRPC Query for Exams
   const { data: rawExams = [], isLoading: isLoadingExams, error: examError } = trpc.exam.getAll.useQuery();
 
-  // Process exams to add university names (memoized)
   const exams: ExamWithUniName[] = useMemo(() => {
-    // Ensure rawExams is correctly typed or cast if necessary, assuming date is Date | null
     const examsOutput = rawExams as unknown as (Omit<RouterOutput['exam']['getAll'][number], 'date'> & { date: Date | null })[];
-    // Always map to ExamWithUniName[], even if universities is empty (university_name will be undefined)
     return examsOutput.map((exam): ExamWithUniName => ({
       ...exam,
-      // Use optional chaining on universities as well
       university_name: universities?.find((u: University) => u.id === exam.university_id)?.name,
     }));
   }, [rawExams, universities]);
 
-  // Modal states
   const [isUniversityModalOpen, setIsUniversityModalOpen] = useState(false);
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
   const [editingUniversity, setEditingUniversity] = useState<University | null>(null);
-  const [editingExam, setEditingExam] = useState<ExamWithUniName | null>(null); // Use ExamWithUniName
+  const [editingExam, setEditingExam] = useState<ExamWithUniName | null>(null);
 
-  // University form state
   const [name, setName] = useState('');
-  const [rank, setRank] = useState<number | null | undefined>(undefined); // Allow null from DB
-  const [notes, setNotes] = useState<string | null>(''); // Allow null from DB
+  const [rank, setRank] = useState<number | null | undefined>(undefined);
+  const [notes, setNotes] = useState<string | null>('');
 
-  // Exam form state
   const [universityId, setUniversityId] = useState<number | undefined>(undefined);
-  const [examDate, setExamDate] = useState(''); // Keep as string for input type="date"
+  const [examDate, setExamDate] = useState('');
   const [examType, setExamType] = useState<UniversityExamType | ''>('');
 
-  // Removed useEffect for fetching exams, handled by trpc.exam.getAll.useQuery
 
-  // University Modal Logic
   const openCreateUniversityModal = () => {
     setEditingUniversity(null);
     setName('');
-    setRank(undefined); // Reset rank
-    setNotes(''); // Reset notes
+    setRank(undefined);
+    setNotes('');
     setIsUniversityModalOpen(true);
   };
 
   const openEditUniversityModal = (university: University) => {
     setEditingUniversity(university);
     setName(university.name);
-    setRank(university.rank); // Rank can be null
-    setNotes(university.notes ?? null); // Set null if notes is undefined
+    setRank(university.rank);
+    setNotes(university.notes ?? null);
     setIsUniversityModalOpen(true);
   };
 
-  // Exam Modal Logic
   const openCreateExamModal = (university?: University) => {
     setEditingExam(null);
     setUniversityId(university?.id);
@@ -86,25 +65,22 @@ const UniversitiesPage = () => {
     setIsExamModalOpen(true);
   };
 
-  const openEditExamModal = (exam: ExamWithUniName) => { // Use ExamWithUniName
+  const openEditExamModal = (exam: ExamWithUniName) => {
     setEditingExam(exam);
     setUniversityId(exam.university_id ?? undefined);
-    // Convert Date to 'yyyy-MM-dd' string for input
     setExamDate(exam.date ? format(exam.date, 'yyyy-MM-dd') : '');
     setExamType(exam.exam_type as UniversityExamType | '');
     setIsExamModalOpen(true);
   };
 
-  // tRPC Mutations for University
   const createUniversityMutation = trpc.university.create.useMutation({
     onSuccess: () => {
-      utils.university.getAll.invalidate(); // Invalidate query on success
+      utils.university.getAll.invalidate();
       setIsUniversityModalOpen(false);
       setEditingUniversity(null);
     },
-    onError: (error: any) => { // Add type annotation for error
+    onError: (error: any) => {
       console.error('Error creating university:', error);
-      // Consider adding user-facing error feedback
     },
   });
 
@@ -114,33 +90,29 @@ const UniversitiesPage = () => {
       setIsUniversityModalOpen(false);
       setEditingUniversity(null);
     },
-    onError: (error: any) => { // Add type annotation for error
+    onError: (error: any) => {
       console.error('Error updating university:', error);
-      // Consider adding user-facing error feedback
     },
   });
 
   const deleteUniversityMutation = trpc.university.delete.useMutation({
     onSuccess: () => {
       utils.university.getAll.invalidate();
-      utils.exam.getAll.invalidate(); // Also invalidate exams as they might be linked
+      utils.exam.getAll.invalidate();
     },
-    onError: (error: any) => { // Add type annotation for error
+    onError: (error: any) => {
       console.error('Error deleting university:', error);
-      // Consider adding user-facing error feedback
     },
   });
 
-  // tRPC Mutations for Exam
   const createExamMutation = trpc.exam.create.useMutation({
     onSuccess: () => {
-      utils.exam.getAll.invalidate(); // Invalidate exam query
+      utils.exam.getAll.invalidate();
       setIsExamModalOpen(false);
       setEditingExam(null);
     },
-    onError: (error: any) => { // Add type annotation for error
+    onError: (error: any) => {
       console.error('Error creating exam:', error);
-      // Consider adding user-facing error feedback
     },
   });
 
@@ -150,9 +122,8 @@ const UniversitiesPage = () => {
       setIsExamModalOpen(false);
       setEditingExam(null);
     },
-    onError: (error: any) => { // Add type annotation for error
+    onError: (error: any) => {
       console.error('Error updating exam:', error);
-      // Consider adding user-facing error feedback
     },
   });
 
@@ -160,14 +131,12 @@ const UniversitiesPage = () => {
     onSuccess: () => {
       utils.exam.getAll.invalidate();
     },
-    onError: (error: any) => { // Add type annotation for error
+    onError: (error: any) => {
       console.error('Error deleting exam:', error);
-      // Consider adding user-facing error feedback
     },
   });
 
 
-  // Save University Handler using tRPC
   const handleSaveUniversity = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || name.trim() === '') {
@@ -188,7 +157,6 @@ const UniversitiesPage = () => {
     }
   };
 
-  // Save Exam Handler using tRPC
   const handleSaveExam = (e: React.FormEvent) => {
     e.preventDefault();
     if (!examType) {
@@ -204,29 +172,25 @@ const UniversitiesPage = () => {
       return;
     }
 
-    // Find university name safely
-    const uniName = universities?.find((u: University) => u.id === universityId)?.name; // Add type for u
+    const uniName = universities?.find((u: University) => u.id === universityId)?.name;
     const examName = examType === '模試' ? '模試' : (uniName ? `${uniName} ${examType}` : examType);
 
-    // Convert string date to Date object for API
     let dateToSend: Date | null = null;
     try {
-        // Use parseISO to handle the 'yyyy-MM-dd' string correctly
         dateToSend = parseISO(examDate);
     } catch (error) {
         console.error("Invalid date format:", examDate);
         alert('無効な日付形式です。');
-        return; // Stop submission if date is invalid
+        return;
     }
 
 
     const examInput: ExamInput = {
       name: examName,
-      date: dateToSend, // Send Date object
+      date: dateToSend,
       is_mock: examType === '模試',
       exam_type: examType,
       university_id: examType === '模試' ? null : universityId,
-      // notes are not part of the modal form, handle if needed
     };
 
     if (editingExam && editingExam.id) {
@@ -236,7 +200,6 @@ const UniversitiesPage = () => {
     }
   };
 
-  // Delete University Handler using tRPC
   const handleDeleteUniversity = (id: number) => {
     if (!confirm('この大学を削除してもよろしいですか？関連する受験日も削除されます。')) {
       return;
@@ -244,24 +207,20 @@ const UniversitiesPage = () => {
     deleteUniversityMutation.mutate({ id });
   };
 
-  // Delete Exam Handler using tRPC
-  const handleDeleteExam = (id: ExamWithUniName['id']) => { // Use correct type
+  const handleDeleteExam = (id: ExamWithUniName['id']) => {
     if (!confirm('この受験日を削除してもよろしいですか？')) {
       return;
     }
     deleteExamMutation.mutate({ id });
   };
 
-  // Calculate Days Remaining - Expects Date object now
   const calculateDaysRemaining = (date: Date | null): number => {
     if (!date) return NaN;
     const todayDate = startOfToday();
-    // No need to parseISO if 'date' is already a Date object
-    if (isBefore(date, todayDate)) return 0; // Keep check for past dates
+    if (isBefore(date, todayDate)) return 0;
     return differenceInDays(date, todayDate) + 1;
   };
 
-  // Combined Loading State using tRPC loading states
   if (isLoadingUniversities || isLoadingExams) {
     return (
       <div className="flex justify-center items-center h-full">
@@ -270,7 +229,6 @@ const UniversitiesPage = () => {
     );
   }
 
-  // Combined Error Display using tRPC error states
   const combinedError = universityError?.message || examError?.message || createUniversityMutation.error?.message || updateUniversityMutation.error?.message || deleteUniversityMutation.error?.message || createExamMutation.error?.message || updateExamMutation.error?.message || deleteExamMutation.error?.message;
 
   return (
@@ -293,7 +251,6 @@ const UniversitiesPage = () => {
         </div>
       )}
 
-      {/* University List */}
       <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -306,7 +263,7 @@ const UniversitiesPage = () => {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {universities && universities.length > 0 ? (
-              universities.map((university: University) => ( // Add type for university
+              universities.map((university: University) => (
                 <tr key={university.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -332,7 +289,7 @@ const UniversitiesPage = () => {
                       <button
                         className="text-green-600 hover:text-green-900"
                         onClick={() => openCreateExamModal(university)}
-                        disabled={createExamMutation.isPending || updateExamMutation.isPending} // Disable while exam mutation is pending
+                        disabled={createExamMutation.isPending || updateExamMutation.isPending}
                       >
                         <Calendar className="h-5 w-5" />
                       </button>
@@ -358,14 +315,13 @@ const UniversitiesPage = () => {
         </table>
       </div>
 
-      {/* Exam List */}
       <div className="mb-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">受験日</h2>
           <button
             className="px-3 py-1 bg-primary text-white rounded-md hover:bg-primary-dark flex items-center text-sm"
             onClick={() => openCreateExamModal()}
-            disabled={createExamMutation.isPending || updateExamMutation.isPending} // Disable while exam mutation is pending
+            disabled={createExamMutation.isPending || updateExamMutation.isPending}
           >
             <Plus className="w-4 h-4 mr-1" />
             受験日を追加
@@ -385,7 +341,6 @@ const UniversitiesPage = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {exams.length > 0 ? (
                 exams.map((exam) => {
-                  // Pass Date object directly to calculateDaysRemaining
                   const daysRemaining = calculateDaysRemaining(exam.date);
                   const displayDays = !isNaN(daysRemaining) ? daysRemaining : null;
                   return (
@@ -396,7 +351,6 @@ const UniversitiesPage = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{exam.exam_type}</td>
-                      {/* Format Date object directly for display */}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{exam.date ? format(exam.date, 'yyyy/MM/dd') : '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {displayDays !== null ? (
@@ -444,7 +398,6 @@ const UniversitiesPage = () => {
         </div>
       </div>
 
-      {/* University Edit Modal */}
       {isUniversityModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -485,7 +438,6 @@ const UniversitiesPage = () => {
         </div>
       )}
 
-      {/* Exam Edit Modal */}
       {isExamModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -518,7 +470,7 @@ const UniversitiesPage = () => {
                   <select className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                     value={universityId || ''} onChange={(e) => setUniversityId(e.target.value ? Number(e.target.value) : undefined)} required={true}>
                     <option value="">大学を選択してください</option>
-                    {universities?.map((university: University) => ( // Add type for university
+                    {universities?.map((university: University) => (
                       <option key={university.id} value={university.id}>
                         {university.name}
                       </option>

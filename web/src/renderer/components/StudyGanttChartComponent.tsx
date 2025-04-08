@@ -463,10 +463,7 @@ const StudyGanttChartComponent: React.FC<StudyGanttChartProps> = ({
         </div>
       )}
 
-      {/* Removed loading and error display sections */}
-
       {/* ガントチャート */}
-      {/* Render based on events prop length */}
       {events.length > 0 ? (
          renderChart()
       ) : (

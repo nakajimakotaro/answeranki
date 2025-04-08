@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-// Removed parseISO from main import as it should not be needed for tRPC Date objects
 import { compareAsc, isWithinInterval, startOfToday, differenceInDays, getYear, format, setMonth, setYear, isBefore, parseISO } from 'date-fns';
 import { trpc } from '../lib/trpc';
 import type { inferRouterOutputs } from '@trpc/server';
@@ -61,8 +60,6 @@ const TextbookStackedProgress = ({
       // Dates should already be Date objects due to superjson
       const processedEvents = eventsToProcess.map(event => ({
           ...event,
-          // startDate: parseISO(event.startDate), // Removed parseISO
-          // endDate: event.endDate ? parseISO(event.endDate) : undefined, // Removed parseISO
       }));
 
       const extractedSchedules: StudySchedule[] = processedEvents
