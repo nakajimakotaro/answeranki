@@ -322,6 +322,36 @@ class AnkiConnectService {
        return []; // Return empty array on tRPC error
      }
   }
+
+  /**
+   * カードに解答する
+   * @param cardId カードID
+   * @param ease 難易度（1: もう一度, 2: 難しい, 3: 普通, 4: 簡単）
+   * @returns 成功したかどうか
+   */
+  async answerCard(cardId: number, ease: 1 | 2 | 3 | 4): Promise<boolean> {
+    try {
+      const response = await this.trpcClient.anki.proxy.mutate({
+        action: 'answerCards',
+        params: { 
+          answers: [
+            { cardId, ease }
+          ]
+        }
+      }) as AnkiConnectResponse;
+
+      if (response.error) {
+        console.error(`AnkiConnect answerCard error: ${response.error}`);
+        return false;
+      }
+      
+      // answerCard returns true on success
+      return response.result === true;
+    } catch (error) {
+      console.error('answerCard failed via tRPC client:', error);
+      return false;
+    }
+  }
 }
 
 // Create and export a singleton instance using the raw tRPC client

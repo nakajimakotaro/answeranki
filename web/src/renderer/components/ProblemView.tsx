@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { parse, compareDesc } from 'date-fns';
-import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Scan, Maximize, XCircle, Play, Pause, StopCircle, Clock } from 'lucide-react';
+import { RefreshCw, AlertCircle, BookOpen, Save, ChevronLeft, ChevronRight, X, Edit, Eye, EyeOff, Scan, Maximize, XCircle, Play, Pause, StopCircle, Clock, Check, RotateCcw, ThumbsUp } from 'lucide-react';
 import { useNotes, useAnkiConnect, useMediaFiles } from '../hooks/index.js';
 import { NoteInfo } from '../types/ankiConnect.js';
 import scansnap, { COLOR_MODE, COMPRESSION, FORMAT, SCAN_MODE, SCANNING_SIDE } from '../../scansnap.js';
@@ -28,7 +28,7 @@ interface ProblemViewProps {
  */
 const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack }: ProblemViewProps) => {
   // useNotes hook now handles its own errors via GlobalErrorBoundary
-  const { isLoading, fetchCurrentCard, fetchNoteById, addAnswerToNote } = useNotes();
+  const { isLoading, fetchCurrentCard, fetchNoteById, addAnswerToNote, answerCard } = useNotes();
   const { isConnected, testConnection } = useAnkiConnect();
   // useMediaFiles hook now handles its own errors via GlobalErrorBoundary
   const {
@@ -74,6 +74,10 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
   const [solvingTime, setSolvingTime] = useState('');
   // 復習時間入力用の状態
   const [reviewTime, setReviewTime] = useState('');
+  // 難易度選択用の状態
+  const [selectedEase, setSelectedEase] = useState<1 | 2 | 3 | 4 | null>(null);
+  // 解答登録成功状態
+  const [answerSuccess, setAnswerSuccess] = useState(false);
 
   // タイマー機能
   const startTimer = () => {
@@ -254,18 +258,18 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
     // Let errors from fetchCurrentCard/fetchNoteById propagate
     if (isCurrentCard) {
         data = await fetchCurrentCard();
-      } else if (noteId) {
-        const noteInfo = await fetchNoteById(noteId);
-        if (noteInfo) {
-          data = {
-            noteId: noteInfo.noteId,
-            noteInfo: noteInfo,
-            deckName: '', // Assuming deckName is not critical or fetched elsewhere
-            question: noteInfo.fields['表面']?.value || '',
-            answer: noteInfo.fields['裏面']?.value || ''
-          };
-        }
+    } else if (noteId) {
+      const noteInfo = await fetchNoteById(noteId);
+      if (noteInfo) {
+        data = {
+          noteId: noteInfo.noteId,
+          noteInfo: noteInfo,
+          deckName: '', // Assuming deckName is not critical or fetched elsewhere
+          question: noteInfo.fields['表面']?.value || '',
+          answer: noteInfo.fields['裏面']?.value || ''
+        };
       }
+    }
 
       if (data) {
         setProblemData(data);
@@ -722,10 +726,56 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                 />
               </div>
 
+              {/* 難易度選択 */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  難易度を選択（オプション）
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className={`btn btn-sm ${selectedEase === 1 ? 'btn-error' : 'btn-outline'} flex items-center`}
+                    onClick={() => setSelectedEase(selectedEase === 1 ? null : 1)}
+                  >
+                    <RotateCcw className="w-3 h-3 mr-1" />
+                    もう一度(1)
+                  </button>
+                  <button
+                    className={`btn btn-sm ${selectedEase === 2 ? 'btn-warning' : 'btn-outline'} flex items-center`}
+                    onClick={() => setSelectedEase(selectedEase === 2 ? null : 2)}
+                  >
+                    <RotateCcw className="w-3 h-3 mr-1" />
+                    難しい(2)
+                  </button>
+                  <button
+                    className={`btn btn-sm ${selectedEase === 3 ? 'btn-info' : 'btn-outline'} flex items-center`}
+                    onClick={() => setSelectedEase(selectedEase === 3 ? null : 3)}
+                  >
+                    <Check className="w-3 h-3 mr-1" />
+                    普通(3)
+                  </button>
+                  <button
+                    className={`btn btn-sm ${selectedEase === 4 ? 'btn-success' : 'btn-outline'} flex items-center`}
+                    onClick={() => setSelectedEase(selectedEase === 4 ? null : 4)}
+                  >
+                    <ThumbsUp className="w-3 h-3 mr-1" />
+                    簡単(4)
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  難易度を選択すると、解答保存時にAnkiに解答結果も登録されます
+                </p>
+              </div>
+
               {/* 保存成功メッセージ */}
-              {saveSuccess && (
+              {(saveSuccess || answerSuccess) && (
                 <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                  解答が正常に保存されました
+                  {saveSuccess && answerSuccess ? (
+                    "解答と難易度が正常に保存されました"
+                  ) : saveSuccess ? (
+                    "解答が正常に保存されました"
+                  ) : (
+                    "難易度が正常に登録されました"
+                  )}
                 </div>
               )}
 
@@ -735,7 +785,7 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                 const isButtonDisabled =
                   isLoading ||
                   !problemData ||
-                  !hasContentToSave ||
+                  (!hasContentToSave && selectedEase === null) ||
                   saving ||
                   isMediaLoading ||
                   saveSuccess;
@@ -743,7 +793,31 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                 return (
                   <button
                     className="btn btn-primary w-full flex items-center justify-center"
-                    onClick={handleSave}
+                    onClick={async () => {
+                      if (!problemData) return;
+                      
+                      setSaving(true);
+                      try {
+                        // 解答内容がある場合は保存
+                        if (hasContentToSave) {
+                          await handleSave();
+                        }
+                        
+                        // 難易度が選択されている場合は解答結果を登録
+                        if (selectedEase !== null) {
+                          const success = await answerCard(problemData.noteId, selectedEase);
+                          if (success) {
+                            setAnswerSuccess(true);
+                            setTimeout(() => setAnswerSuccess(false), 3000);
+                            setSelectedEase(null);
+                          }
+                        }
+                      } catch (error) {
+                        console.error('Failed to save answer or register difficulty:', error);
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
                     disabled={isButtonDisabled}
                   >
                     {saving ? (
@@ -754,7 +828,13 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
                     ) : (
                       <>
                         <Save className="w-4 h-4 mr-2" />
-                        解答を保存
+                        {hasContentToSave && selectedEase !== null ? (
+                          "解答と難易度を保存"
+                        ) : hasContentToSave ? (
+                          "解答を保存"
+                        ) : (
+                          "難易度を登録"
+                        )}
                       </>
                     )}
                   </button>
@@ -768,7 +848,7 @@ const ProblemView = ({ noteId, isCurrentCard = false, onRefresh, onNavigateBack 
             <div className="card p-6 border rounded-lg shadow-sm mb-4">
               <h2 className="text-xl font-semibold mb-3 flex items-center">
                 <BookOpen className="w-5 h-5 mr-2" />
-                {isCurrentCard ? '現在表示中のカード' : '問題情報'}
+                問題情報
               </h2>
 
               {problemData.deckName && (

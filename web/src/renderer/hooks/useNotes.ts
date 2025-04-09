@@ -221,6 +221,27 @@ export function useNotes() {
     }
   }, []);
 
+  /**
+   * カードに解答する
+   * @param cardId カードID
+   * @param ease 難易度（1: もう一度, 2: 難しい, 3: 普通, 4: 簡単）
+   */
+  const answerCard = useCallback(async (cardId: number, ease: 1 | 2 | 3 | 4) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const success = await ankiConnectService.answerCard(cardId, ease);
+      return success;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error during card answer');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   return {
     notes,
     isLoading,
@@ -229,6 +250,7 @@ export function useNotes() {
     fetchNoteById,
     updateNoteFields,
     addAnswerToNote,
-    fetchCurrentCard
+    fetchCurrentCard,
+    answerCard
   };
 }
