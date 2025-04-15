@@ -36,7 +36,7 @@ window.onunhandledrejection = (event) => {
   console.error("window.onunhandledrejection caught:", event.reason);
 
   // Extract the error object or create one
-  const errorObject = event.reason instanceof Error ? event.reason : new Error(String(event.reason ?? 'Unknown rejection reason'));
+  const errorObject = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
   const errorMessage = `Unhandled promise rejection: ${errorObject.message}`;
 
   // Dispatch the custom event

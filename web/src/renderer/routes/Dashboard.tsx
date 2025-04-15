@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { format, differenceInDays, startOfToday, isBefore, compareAsc } from 'date-fns';
-import DailyLogInput from '../components/DailyLogInput.js';
 import { Calendar, ChevronRight, BookOpen, GraduationCap, Clock } from 'lucide-react';
 import { trpc } from '../lib/trpc.js';
 import type { inferRouterOutputs } from '@trpc/server';
@@ -15,7 +14,7 @@ type ExamOutput = RouterOutput['exam']['getAll'][number];
 
 // 計算された進捗情報の型定義
 interface CalculatedProgress {
-  textbookId: number;
+  textbookId: string;
   title: string;
   subject: string;
   totalProblems: number;
@@ -79,8 +78,6 @@ const Dashboard = () => {
       todayLogs: StudyLogOutput[]
   ) => {
     const progressData: CalculatedProgress[] = books.map(book => {
-      if (!book.id) return null;
-
       const totalSolved = allLogs
         .filter(log => log.textbook_id === book.id)
         .reduce((sum, log) => sum + (log.actual_amount || 0), 0);
@@ -92,7 +89,7 @@ const Dashboard = () => {
         ? Math.round((totalSolved / book.total_problems) * 100)
         : 0;
 
-      return {
+      const data: CalculatedProgress = {
         textbookId: book.id,
         title: book.title,
         subject: book.subject,
@@ -102,7 +99,8 @@ const Dashboard = () => {
         progressPercentage: progressPercentage,
         ankiDeckName: book.anki_deck_name,
       };
-    }).filter((item): item is NonNullable<typeof item> => item !== null);
+      return data;
+    });
 
     setProgress(progressData);
   };
@@ -257,22 +255,6 @@ const Dashboard = () => {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-      
-      {/* 学習ログ入力 */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-4 flex items-center">
-          <Clock className="mr-2" />
-          今日の学習記録
-        </h2>
-        <div className="bg-white rounded-lg shadow p-4 dark:bg-gray-800">
-          <DailyLogInput
-            textbooks={textbooksQuery.data || []}
-            date={todayDate}
-            onLogUpdated={handleLogUpdate}
-            existingLogs={logsQuery.data || []}
-          />
         </div>
       </div>
       

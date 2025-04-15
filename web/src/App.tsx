@@ -7,16 +7,20 @@ import './App.css';
 import Layout from './renderer/components/Layout.js';
 import GlobalErrorDisplay from './renderer/components/GlobalErrorDisplay.js';
 import { ErrorProvider, useError } from './renderer/context/ErrorContext.js';
-import { trpc } from './renderer/lib/trpc.js';
 import superjson from 'superjson';
-import ProblemDetail from './renderer/routes/ProblemDetail.js';
 import ProblemList from './renderer/routes/ProblemList.js';
-import ProblemView from './renderer/components/ProblemView.js';
+// ProblemView を削除し、新しいページコンポーネントをインポート
+// import ProblemView from './renderer/components/ProblemView.js';
+import ProblemDetailPage from './renderer/routes/ProblemDetailPage.js';
+import ReviewPage from './renderer/routes/ReviewPage.js';
 import Dashboard from './renderer/routes/Dashboard.js';
 import TextbooksPage from './renderer/routes/TextbooksPage.js';
 import UniversitiesPage from './renderer/routes/UniversitiesPage.js';
 import SchedulesPage from './renderer/routes/SchedulesPage.js';
 import ExamsPage from './renderer/routes/ExamsPage.js';
+import TodaysTasks from './renderer/routes/TodaysTasks.js';
+import { AppRouter } from '@server/router';
+import { trpc } from './renderer/lib/trpc.js';
 
 const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
   return (
@@ -38,9 +42,10 @@ function AppContent() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
-          <Route path="problem/:id" element={<ProblemDetail />} />
           <Route path="problems" element={<ProblemList />} />
-          <Route path="current" element={<ProblemView isCurrentCard={true} />} />
+          <Route path="problem/:noteId" element={<ProblemDetailPage />} />
+          <Route path="todays-tasks" element={<TodaysTasks />} />
+          <Route path="review" element={<ReviewPage />} />
           <Route path="textbooks" element={<TextbooksPage />} />
           <Route path="universities" element={<UniversitiesPage />} />
           <Route path="schedules" element={<SchedulesPage />} />
@@ -109,7 +114,6 @@ function App() {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        {/* ErrorProvider が AppWithErrorBoundary をラップする */}
         <ErrorProvider>
           <AppWithErrorBoundary />
         </ErrorProvider>

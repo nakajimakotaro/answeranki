@@ -7,7 +7,9 @@ import { promisify } from 'util';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { callAnkiConnect } from '../services/ankiService.js';
+import { YankiConnect } from 'yanki-connect';
+
+const ankiConnect = new YankiConnect();
 
 const execAsync = promisify(exec);
 
@@ -80,20 +82,12 @@ export const imageRouter = router({
         finalFilename = finalFilename.replace(/\.[^/.]+$/, '') + '.avif';
       }
 
-      const ankiResponse = await callAnkiConnect({
-        action: 'storeMediaFile',
-        params: {
+      await ankiConnect.media.storeMediaFile(
+        {
           filename: finalFilename,
           data: uploadData,
-        },
-      });
+        });
 
-      if (ankiResponse.error) {
-          throw new TRPCError({
-              code: 'INTERNAL_SERVER_ERROR',
-              message: `AnkiConnect failed to store media file: ${ankiResponse.error}`,
-          });
-      }
 
       return { success: true, filename: finalFilename };
 

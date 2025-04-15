@@ -48,7 +48,7 @@ const TextbookStackedProgress = ({
       undefined, { staleTime: 5 * 60 * 1000 }
   );
 
-  const progressData: { [key: number]: ProgressOutput } = {}; // Placeholder
+  const progressData: { [key: string]: ProgressOutput } = {}; // Placeholder
 
   // --- Derived State and Data Processing ---
 
@@ -119,7 +119,7 @@ const TextbookStackedProgress = ({
     return isWithinInterval(targetDate, { start, end });
   };
 
-  const calculateProgress = (textbookId: number): number => {
+  const calculateProgress = (textbookId: string): number => {
     const progress = progressData[textbookId];
     const textbook = textbooksData?.find(t => t.id === textbookId);
 
@@ -310,7 +310,7 @@ const TextbookStackedProgress = ({
                       <span className="text-gray-500">総問題数:</span> {textbook.total_problems}問
                     </div>
                     <div>
-                      <span className="text-gray-500">解いた問題:</span> {progressData[textbook.id]?.progress?.solvedProblems ?? 'N/A'}問 {/* Keep N/A for placeholder */}
+                      <span className="text-gray-500">解いた問題:</span> {progressData[textbook.id]?.progress?.solvedProblems ?? 'N/A'}問
                     </div>
                   </div>
                 </div>

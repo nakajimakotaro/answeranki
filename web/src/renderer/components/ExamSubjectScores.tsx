@@ -6,7 +6,7 @@ import { inferRouterOutputs } from '@trpc/server';
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 interface SubjectScore {
-  id: number;
+  id: string;
   exam_id: number;
   exam_type: string;
   subject: string;
@@ -20,7 +20,7 @@ type SubjectExamType = '共テ' | '二次試験';
 
 
 interface ExamSubjectScoresProps {
-  examId: number;
+  examId: string;
 }
 
 /**
@@ -76,7 +76,7 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
       initialScores['二次試験'][subject] = { score: '', maxScore: '' };
     });
 
-    subjectScoresQuery.data.forEach((score) => {
+    subjectScoresQuery.data.forEach((score: SubjectScore) => {
       const scoreVal = score.score !== null && score.score !== undefined ? String(score.score) : '';
       const maxScoreVal = score.max_score !== null && score.max_score !== undefined ? String(score.max_score) : '';
 
@@ -122,7 +122,7 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
     }
   };
 
-  const handleDeleteScore = (scoreId: number) => {
+  const handleDeleteScore = (scoreId: string) => {
     if (window.confirm('この点数を削除してもよろしいですか？')) {
         deleteScoreMutation.mutate({ scoreId });
     }
@@ -162,7 +162,7 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
   ) => {
     if (!displayCondition) return null;
 
-    const scores = subjectScoresQuery.data?.filter((score) => score.exam_type === examType) || [];
+    const scores = subjectScoresQuery.data?.filter((score: SubjectScore) => score.exam_type === examType) || [];
     const currentEditScores = scoresByExamType[examType] || {};
 
     if (editMode) {
@@ -235,7 +235,7 @@ const ExamSubjectScores = ({ examId }: ExamSubjectScoresProps) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {scores.map((score) => (
+              {scores.map((score: SubjectScore) => (
                 <tr key={score.id}>
                   <td className="py-2 px-3 whitespace-nowrap">{score.subject.replace('_', '/')}</td>
                   <td className="py-2 px-3 whitespace-nowrap">{score.score ?? '-'}</td>

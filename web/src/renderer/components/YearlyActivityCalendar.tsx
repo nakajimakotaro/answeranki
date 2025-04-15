@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { getYear, getDaysInYear, startOfYear, getDay, addDays, format, getDate, getMonth } from 'date-fns';
-import { trpc, rawTrpcClient } from '../lib/trpc.js';
+import { trpc, } from '../lib/trpc.js';
 import { Calendar, Filter, BarChart2 } from 'lucide-react';
 
 interface YearlyActivityCalendarProps {

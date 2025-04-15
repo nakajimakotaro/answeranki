@@ -1,11 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { parseISO, differenceInDays, startOfToday, isBefore, format } from 'date-fns';
-import { trpc } from '../lib/trpc';
 import type { Exam, ExamInput } from '@shared/types/exam';
-import type { UniversityExamType } from '../types/schedule';
 import { GraduationCap, Plus, Edit, Trash, Calendar } from 'lucide-react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@server/router';
+import { trpc } from '../lib/trpc';
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type University = RouterOutput['university']['getAll'][number];
@@ -14,16 +13,15 @@ type ExamOutput = Omit<RouterOutput['exam']['getAll'][number], 'date'> & { date:
 type ExamWithUniName = ExamOutput & { university_name?: string };
 
 const UniversitiesPage = () => {
-  const utils = trpc.useUtils();
   const { data: universities = [], isLoading: isLoadingUniversities, error: universityError } = trpc.university.getAll.useQuery();
-
   const { data: rawExams = [], isLoading: isLoadingExams, error: examError } = trpc.exam.getAll.useQuery();
+  const utils = trpc.useContext();
 
   const exams: ExamWithUniName[] = useMemo(() => {
     const examsOutput = rawExams as unknown as (Omit<RouterOutput['exam']['getAll'][number], 'date'> & { date: Date | null })[];
     return examsOutput.map((exam): ExamWithUniName => ({
       ...exam,
-      university_name: universities?.find((u: University) => u.id === exam.university_id)?.name,
+      university_name: "仮大学",
     }));
   }, [rawExams, universities]);
 
@@ -36,9 +34,9 @@ const UniversitiesPage = () => {
   const [rank, setRank] = useState<number | null | undefined>(undefined);
   const [notes, setNotes] = useState<string | null>('');
 
-  const [universityId, setUniversityId] = useState<number | undefined>(undefined);
   const [examDate, setExamDate] = useState('');
-  const [examType, setExamType] = useState<UniversityExamType | ''>('');
+  // Use string type for examType state
+  const [examType, setExamType] = useState<string>('');
 
 
   const openCreateUniversityModal = () => {
@@ -59,7 +57,6 @@ const UniversitiesPage = () => {
 
   const openCreateExamModal = (university?: University) => {
     setEditingExam(null);
-    setUniversityId(university?.id);
     setExamDate('');
     setExamType('');
     setIsExamModalOpen(true);
@@ -67,9 +64,9 @@ const UniversitiesPage = () => {
 
   const openEditExamModal = (exam: ExamWithUniName) => {
     setEditingExam(exam);
-    setUniversityId(exam.university_id ?? undefined);
     setExamDate(exam.date ? format(exam.date, 'yyyy-MM-dd') : '');
-    setExamType(exam.exam_type as UniversityExamType | '');
+    // Use string type assertion
+    setExamType(exam.exam_type as string);
     setIsExamModalOpen(true);
   };
 
@@ -163,7 +160,7 @@ const UniversitiesPage = () => {
       alert('試験種別を選択してください');
       return;
     }
-    if (examType !== '模試' && !universityId) {
+    if (examType !== '模試') {
       alert('大学は必須です');
       return;
     }
@@ -172,7 +169,7 @@ const UniversitiesPage = () => {
       return;
     }
 
-    const uniName = universities?.find((u: University) => u.id === universityId)?.name;
+    const uniName = "仮大学";
     const examName = examType === '模試' ? '模試' : (uniName ? `${uniName} ${examType}` : examType);
 
     let dateToSend: Date | null = null;
@@ -190,7 +187,6 @@ const UniversitiesPage = () => {
       date: dateToSend,
       is_mock: examType === '模試',
       exam_type: examType,
-      university_id: examType === '模試' ? null : universityId,
     };
 
     if (editingExam && editingExam.id) {
@@ -200,7 +196,7 @@ const UniversitiesPage = () => {
     }
   };
 
-  const handleDeleteUniversity = (id: number) => {
+  const handleDeleteUniversity = (id: string) => {
     if (!confirm('この大学を削除してもよろしいですか？関連する受験日も削除されます。')) {
       return;
     }
@@ -448,7 +444,7 @@ const UniversitiesPage = () => {
                <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">試験種別</label>
                 <select className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={examType} onChange={(e) => setExamType(e.target.value as UniversityExamType | '')} required>
+                  value={examType} onChange={(e) => setExamType(e.target.value)} required>
                   <option value="">種別を選択してください</option>
                   <option value="一般入試">一般入試</option>
                   <option value="共通テスト">共通テスト</option>
@@ -464,20 +460,6 @@ const UniversitiesPage = () => {
                 <input type="date" className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                   value={examDate} onChange={(e) => setExamDate(e.target.value)} required />
               </div>
-              {examType && examType !== '模試' && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">大学</label>
-                  <select className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                    value={universityId || ''} onChange={(e) => setUniversityId(e.target.value ? Number(e.target.value) : undefined)} required={true}>
-                    <option value="">大学を選択してください</option>
-                    {universities?.map((university: University) => (
-                      <option key={university.id} value={university.id}>
-                        {university.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div className="flex justify-end space-x-2">
                 <button type="button" className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
                   onClick={() => setIsExamModalOpen(false)}

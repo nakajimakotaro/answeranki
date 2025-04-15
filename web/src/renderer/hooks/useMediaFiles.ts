@@ -17,7 +17,6 @@ export function useMediaFiles() {
   // tRPC mutations
   const convertToAvifMutation = trpc.image.convertToAvif.useMutation();
   const uploadToAnkiMutation = trpc.image.uploadToAnki.useMutation();
-  const clearCacheMutation = trpc.media.clearCache.useMutation();
 
   /**
    * 画像ファイルをBase64エンコードする
@@ -125,32 +124,13 @@ export function useMediaFiles() {
     return imageFiles;
   }, []);
 
-  /**
-   * メディアキャッシュをクリアする (tRPC版)
-   */
-  const clearMediaCache = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true); // Optionally set loading state
-    setError(null);
-    try {
-      const result = await clearCacheMutation.mutateAsync();
-      return result.success;
-    } catch (error) {
-      console.error('Failed to clear media cache via tRPC hook:', error);
-      setError(error instanceof Error ? error : new Error('キャッシュのクリア中にエラーが発生しました'));
-      return false;
-    } finally {
-       setIsLoading(false); // Optionally clear loading state
-    }
-  }, [clearCacheMutation]);
-
   return {
-    isLoading: isLoading || convertToAvifMutation.isPending || uploadToAnkiMutation.isPending || clearCacheMutation.isPending,
-    error: error || convertToAvifMutation.error || uploadToAnkiMutation.error || clearCacheMutation.error,
+    isLoading: isLoading || convertToAvifMutation.isPending || uploadToAnkiMutation.isPending,
+    error: error || convertToAvifMutation.error || uploadToAnkiMutation.error,
     encodeImageToBase64,
     convertToAvif,
     uploadImage,
     retrieveImage,
     handleFileDrop,
-    clearMediaCache,
   };
 }

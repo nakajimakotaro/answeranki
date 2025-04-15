@@ -76,17 +76,16 @@ const ExamsPage = () => {
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
   const [selectedExam, setSelectedExam] = useState<ExamOutput | null>(null);
-  const [formData, setFormData] = useState<Omit<ExamInput, 'date'> & { date: string }>({
+  const [formData, setFormData] = useState<Omit<ExamInput, 'date'> & { date: string; }>({
     name: '',
     date: format(new Date(), 'yyyy-MM-dd'),
     is_mock: false,
     exam_type: 'descriptive',
-    university_id: null,
     notes: ''
   });
 
   // 点数表示用の状態
-  const [expandedExamId, setExpandedExamId] = useState<number | null>(null);
+  const [expandedExamId, setExpandedExamId] = useState<string | null>(null);
 
   // フォームリセット
   const resetForm = () => {
@@ -95,7 +94,6 @@ const ExamsPage = () => {
       date: format(new Date(), 'yyyy-MM-dd'),
       is_mock: false,
       exam_type: 'descriptive',
-      university_id: null,
       notes: ''
     });
     setSelectedExam(null);
@@ -112,7 +110,6 @@ const ExamsPage = () => {
       date: format(exam.date, 'yyyy-MM-dd'),
       is_mock: exam.is_mock,
       exam_type: exam.exam_type,
-      university_id: exam.university_id,
       notes: exam.notes || ''
     });
     setFormMode('edit');
@@ -121,7 +118,7 @@ const ExamsPage = () => {
   };
 
   // 試験の削除 (Uses tRPC mutation)
-  const handleDeleteExam = (examId: number) => {
+  const handleDeleteExam = (examId: string) => {
     if (window.confirm('この試験を削除してもよろしいですか？関連する点数データもすべて削除されます。')) {
       setMutationError(null);
       deleteExamMutation.mutate({ id: examId });
@@ -164,7 +161,6 @@ const ExamsPage = () => {
     const mutationPayloadBase = {
         ...formData,
         date: dateObject,
-        university_id: formData.university_id ? Number(formData.university_id) : null,
     };
 
     if (formMode === 'create') {
@@ -199,7 +195,7 @@ const ExamsPage = () => {
   };
 
   // 試験の展開/折りたたみを切り替え
-  const toggleExamExpansion = (examId: number) => {
+  const toggleExamExpansion = (examId: string) => {
     if (expandedExamId === examId) {
       setExpandedExamId(null);
     } else {
@@ -302,22 +298,6 @@ const ExamsPage = () => {
                 </label>
               </div>
             </div>
-
-            {/* University ID input (always shown now) */}
-              <div className="mb-4">
-                <label htmlFor="university_id" className="block text-sm font-medium text-gray-700 mb-1">
-                  大学ID (本番試験の場合)
-                </label>
-                <input
-                  id="university_id"
-                  type="number"
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  value={formData.university_id ?? ''}
-                  onChange={(e) => setFormData({ ...formData, university_id: e.target.value ? parseInt(e.target.value, 10) : null })}
-                  placeholder="関連する大学のID"
-                />
-                 {/* TODO: Replace with a University Selector Component */}
-              </div>
 
             <div className="mb-4">
               <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
@@ -426,12 +406,6 @@ const ExamsPage = () => {
                     <span className="inline-flex items-center px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full text-xs">
                       {formatExamType(exam.exam_type)}
                     </span>
-                    {exam.university_id && (
-                       <span className="inline-flex items-center text-purple-700">
-                         <Building className="w-4 h-4 mr-1" />
-                         大学ID: {exam.university_id}
-                       </span>
-                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">

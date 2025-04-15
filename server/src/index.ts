@@ -8,6 +8,7 @@ console.log('Loading environment variables from:', envPath);
 dotenv.config({ path: envPath });
 
 import express, { Request, Response } from 'express';
+import compression from 'compression';
 import { setupMediaRoutes } from './services/mediaServer.js';
 import * as trpcExpress from '@trpc/server/adapters/express';
 import { appRouter } from './router.js';
@@ -20,6 +21,7 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 
 // Middleware
+app.use(compression()); // Add this line to enable compression
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 

@@ -6,9 +6,9 @@ import {
   format,
   compareAsc,
 } from 'date-fns';
-import ankiConnectService from '../services/ankiConnectService.js';
 import { BookOpen, Plus, Edit, Trash, Link as LinkIcon, Calendar } from 'lucide-react';
-import { trpc } from '../lib/trpc.js'; // Import tRPC client
+import { trpc } from '../lib/trpc.js';
+import { useDecks } from '../hooks'; // useDecks フックをインポート
 import { StudyScheduleSchema, StudyScheduleInputSchema, StudyScheduleUpdateSchema } from '@answeranki/shared/schemas/schedule'; // Import shared Zod schemas
 import { z } from 'zod';
 import { inferRouterOutputs } from '@trpc/server'; // Import inferRouterOutputs
@@ -111,8 +111,9 @@ const TextbooksPage = () => {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [editingTextbook, setEditingTextbook] = useState<Textbook | null>(null);
   const [linkingTextbook, setLinkingTextbook] = useState<Textbook | null>(null);
-  const [deckNames, setDeckNames] = useState<string[]>([]);
+  // const [deckNames, setDeckNames] = useState<string[]>([]); // useDecks から取得するため不要
   const [selectedDeck, setSelectedDeck] = useState<string>('');
+  const { decks, isLoading: isLoadingDecks, error: decksError, refetch: refetchDecks } = useDecks(); // useDecks フックを使用
 
   // 参考書フォーム状態
   const [title, setTitle] = useState('');
@@ -293,12 +294,12 @@ const TextbooksPage = () => {
   const openLinkModal = async (textbook: Textbook) => {
     setLinkingTextbook(textbook);
     setError(null); // Clear previous UI errors if any
-    // Let potential errors from getDeckNames propagate up to React Query/global handlers.
-    const decks = await ankiConnectService.getDeckNames();
-    setDeckNames(decks);
+    // useDecks フックがデッキ名を取得するため、ここでの取得は不要
+    // const decks = await ankiConnectService.getDeckNames(); // 削除
+    // setDeckNames(decks); // 削除
+    // 必要であれば refetchDecks() を呼び出して最新化できるが、通常はキャッシュで十分
     setSelectedDeck(textbook.anki_deck_name || '');
     setIsLinkModalOpen(true);
-    // If getDeckNames fails, setIsLinkModalOpen(true) will not be reached.
   };
 
   // 参考書を保存
@@ -333,7 +334,7 @@ const TextbooksPage = () => {
   };
 
   // 参考書を削除
-  const handleDeleteTextbook = (id: number) => {
+  const handleDeleteTextbook = (id: string) => {
     if (!confirm('この参考書を削除してもよろしいですか？関連するスケジュールや学習ログも削除される可能性があります。')) {
       return;
     }
@@ -585,7 +586,8 @@ const TextbooksPage = () => {
                   onChange={(e) => setSelectedDeck(e.target.value)}
                 >
                   <option value="">デッキを選択してください</option>
-                  {deckNames.map((deck) => (
+                  {/* deckNames state の代わりに useDecks から取得した decks を使用 */}
+                  {decks.map((deck) => (
                     <option key={deck} value={deck}>
                       {deck}
                     </option>

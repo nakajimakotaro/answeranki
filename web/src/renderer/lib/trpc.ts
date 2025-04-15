@@ -1,15 +1,5 @@
 import { createTRPCReact } from '@trpc/react-query';
-import { httpBatchLink } from '@trpc/client';
-import superjson from 'superjson';
 import type { AppRouter } from '../../../../server/src/router';
 
+// createTRPCReact を使用して trpc オブジェクトを作成し、エクスポート
 export const trpc = createTRPCReact<AppRouter>();
-
-export const rawTrpcClient = createTRPCReact<AppRouter>().createClient({
-  links: [
-    httpBatchLink({
-      url: '/trpc',
-      transformer: superjson,
-    }),
-  ],
-});
