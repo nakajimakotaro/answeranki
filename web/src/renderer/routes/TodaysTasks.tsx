@@ -13,27 +13,29 @@ const TodaysTasks = () => {
   const { isConnected, testConnection } = useAnkiConnect();
   const [connectionChecked, setConnectionChecked] = useState(false);
 
-  // tRPC クエリフックを使用
+  // 今日のタスクを取得
   const {
     data: tasks = [],
-    isLoading,
-    error: queryError,
+    isLoading: isLoadingTasks,
+    error: tasksError,
     refetch: refetchTasks
-  } = trpc.schedule.getTodaysTasks.useQuery(
-    undefined,
-    {
-      // オプションが必要な場合はここに追加
-    }
-  );
+  } = trpc.schedule.getTodaysTasks.useQuery();
 
-  // tRPC ミューテーションフックを使用
+  // 参考書情報を取得してAnkiデッキ名を取得
+  const {
+    data: textbooks = [],
+    isLoading: isLoadingTextbooks,
+    error: textbooksError
+  } = trpc.textbook.getTextbooks.useQuery();
+
+  // レビューミューテーション
   const reviewMutation = trpc.anki.graphical.guiDeckReview.useMutation({
     onError: (err) => {
-      console.error(`Failed to start deck review:`, err);
+      console.error('Failed to start deck review:', err);
     },
   });
 
-  // AnkiConnectとの接続を確認
+  // AnkiConnect接続チェック
   useEffect(() => {
     const checkConnection = async () => {
       if (testConnection) {
@@ -41,33 +43,31 @@ const TodaysTasks = () => {
       }
       setConnectionChecked(true);
     };
-
     checkConnection();
   }, [testConnection]);
 
-  // 更新ボタンの処理
+  // 更新ボタン処理
   const handleRefresh = useCallback(() => {
     refetchTasks();
     reviewMutation.reset();
   }, [refetchTasks, reviewMutation]);
 
-  // デッキレビュー開始処理
+  // レビュー開始処理
   const handleStartReview = useCallback((deckName: string) => {
     if (!isConnected) {
       console.warn('AnkiConnect is not connected. Cannot start review.');
       return;
     }
-    // Ankiのデッキレビューを開始
     reviewMutation.mutate({ name: deckName }, {
       onSuccess: () => {
-        // レビュー開始成功後、レビューページに遷移（デッキ名をクエリパラメータで渡す）
         navigate(`/review?deck=${encodeURIComponent(deckName)}`);
-      }
+      },
     });
   }, [isConnected, reviewMutation, navigate]);
 
-  // エラー表示用の変数
-  const displayError = queryError || reviewMutation.error;
+  // エラー表示用
+  const displayError = tasksError || reviewMutation.error || textbooksError;
+  const isLoading = isLoadingTasks || reviewMutation.isPending;
 
   return (
     <div className="container mx-auto p-4">
@@ -76,7 +76,7 @@ const TodaysTasks = () => {
         <button
           onClick={handleRefresh}
           className="btn btn-primary flex items-center"
-          disabled={isLoading || reviewMutation.isPending}
+          disabled={isLoading}
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
           更新
@@ -89,13 +89,12 @@ const TodaysTasks = () => {
           <AlertCircle className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
           <div>
             <p className="font-semibold">AnkiConnectに接続できません</p>
-            <p>Ankiが起動しているか、AnkiConnectプラグインがインストールされ、許可されているか確認してください。</p>
+            <p>
+              Ankiが起動しているか、AnkiConnectプラグインがインストールされ、許可されているか確認してください。
+            </p>
             {testConnection && (
               <p className="mt-1">
-                <button
-                  onClick={testConnection}
-                  className="text-yellow-700 underline"
-                >
+                <button onClick={testConnection} className="text-yellow-700 underline">
                   再接続を試みる
                 </button>
               </p>
@@ -123,56 +122,67 @@ const TodaysTasks = () => {
         </h2>
 
         {/* ローディング表示 */}
-        {isLoading ? (
+        {(isLoadingTasks || isLoadingTextbooks) ? (
           <div className="flex justify-center items-center h-32">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
           </div>
         ) : tasks.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {tasks.map((task) => (
-              <div
-                key={task.id}
-                className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
-              >
-                <div className="flex items-center mb-2">
-                  <BookOpen className="w-5 h-5 mr-2 text-primary flex-shrink-0" />
-                  <h3 className="text-lg font-medium truncate" title={task.textbook_title}>{task.textbook_title}</h3>
-                </div>
-                <div className="text-sm text-gray-600 mb-1">
-                  科目: {task.textbook_subject}
-                </div>
-                <div className="text-sm text-gray-600 mb-3">
-                  目標: {task.daily_goal !== null ? `${task.daily_goal} 問` : '未設定'}
-                </div>
-
-                {task.anki_deck_name ? (
-                  <button
-                    className="btn btn-primary w-full flex items-center justify-center"
-                    onClick={() => handleStartReview(task.anki_deck_name!)}
-                    disabled={!isConnected || reviewMutation.isPending}
-                  >
-                    {reviewMutation.isPending && reviewMutation.variables?.name === task.anki_deck_name ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                        開始中...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4 mr-2" />
-                        レビュー開始
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <div className="text-center py-2 bg-gray-100 rounded text-gray-500 text-sm">
-                    Ankiデッキ未設定
+            {tasks.map((task) => {
+              const deckName =
+                task.anki_deck_name ??
+                textbooks.find((tb: { id: string; anki_deck_name: string | null }) => tb.id === task.textbook_id)?.anki_deck_name ??
+                null;
+              return (
+                <div
+                  key={task.id}
+                  className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
+                >
+                  <div className="flex items-center mb-2">
+                    <BookOpen className="w-5 h-5 mr-2 text-primary flex-shrink-0" />
+                    <h3
+                      className="text-lg font-medium truncate"
+                      title={task.textbook_title}
+                    >
+                      {task.textbook_title}
+                    </h3>
                   </div>
-                )}
-              </div>
-            ))}
+                  <div className="text-sm text-gray-600 mb-1">
+                    科目: {task.textbook_subject}
+                  </div>
+                  <div className="text-sm text-gray-600 mb-3">
+                    目標: {task.daily_goal !== null ? `${task.daily_goal} 問` : '未設定'}
+                  </div>
+
+                  {deckName ? (
+                    <button
+                      className="btn btn-primary w-full flex items-center justify-center"
+                      onClick={() => handleStartReview(deckName)}
+                      disabled={!isConnected || reviewMutation.isPending}
+                    >
+                      {reviewMutation.isPending &&
+                      reviewMutation.variables?.name === deckName ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                          開始中...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 mr-2" />
+                          レビュー開始
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="text-center py-2 bg-gray-100 rounded text-gray-500 text-sm">
+                      Ankiデッキ未設定
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
-          // データがない場合の表示
           <div className="text-center py-8 bg-gray-50 rounded-lg">
             <p className="text-gray-500">今日のスケジュールはありません</p>
             <p className="text-sm text-gray-400 mt-1">

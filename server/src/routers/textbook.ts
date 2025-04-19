@@ -196,7 +196,17 @@ export const textbookRouter = router({
           notes: noteIds
         });
       }
-      
+
+      // Delete linked schedules
+      const scheduleNoteIds = await ankiConnect.note.findNotes({
+        query: `deck:"Meta" tag:schedule ${toStringAnkiQuery(`"textbook_id":"${id}"`)}`
+      });
+      if (scheduleNoteIds.length > 0) {
+        await ankiConnect.note.deleteNotes({
+          notes: scheduleNoteIds
+        });
+      }
+
       return { success: true, message: 'Textbook deleted successfully' };
     }),
 

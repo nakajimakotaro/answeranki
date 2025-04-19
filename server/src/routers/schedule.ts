@@ -331,18 +331,33 @@ export const scheduleRouter = router({
       });
 
       
-      // 必要なデータを整形して返す
-      const result = todaySchedules.map(schedule => ({
-        id: schedule.id,
-        textbook_id: schedule.textbook_id,
-        textbook_title: schedule.textbook_title,
-        textbook_subject: schedule.textbook_subject,
-        anki_deck_name: null, // Ankiからは取得できないので、nullを設定
-        start_date: new Date(schedule.start_date),
-        end_date: new Date(schedule.end_date),
-        daily_goal: schedule.daily_goal ?? null,
-        buffer_days: schedule.buffer_days ?? null,
-        total_problems: schedule.total_problems ?? null,
+      // 必要なデータを整形して返す（参考書のAnkiデッキ名を取得）
+      const result = await Promise.all(todaySchedules.map(async (schedule) => {
+        let deckName: string | null = null;
+        try {
+          const tbNoteIds = await ankiConnect.note.findNotes({
+            query: 'deck:"Meta" tag:textbook ' + toStringAnkiQuery(`"id":"${schedule.textbook_id}"`)
+          });
+          if (tbNoteIds.length > 0) {
+            const tbNotesInfo = await ankiConnect.note.notesInfo({ notes: [tbNoteIds[0]] });
+            const tbData = JSON.parse(tbNotesInfo[0].fields.Info.value);
+            deckName = tbData.anki_deck_name ?? null;
+          }
+        } catch (e) {
+          console.warn('Failed to fetch textbook Anki deck name for', schedule.textbook_id, e);
+        }
+        return {
+          id: schedule.id,
+          textbook_id: schedule.textbook_id,
+          textbook_title: schedule.textbook_title,
+          textbook_subject: schedule.textbook_subject,
+          anki_deck_name: deckName,
+          start_date: new Date(schedule.start_date),
+          end_date: new Date(schedule.end_date),
+          daily_goal: schedule.daily_goal ?? null,
+          buffer_days: schedule.buffer_days ?? null,
+          total_problems: schedule.total_problems ?? null,
+        };
       }));
       return result;
     }),
