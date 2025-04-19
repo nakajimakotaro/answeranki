@@ -19,7 +19,16 @@ const loggerMiddleware = t.middleware(async ({ path, type, next }) => {
   const start = Date.now();
   const result = await next();
   const durationMs = Date.now() - start;
-  console.log(`[${type}] ${path} - ${result.ok ? 'OK' : 'ERR'} (${durationMs}ms)`);
+  const status = result.ok ? 'OK' : 'ERR';
+  console.log(`[${type}] ${path} - ${status} (${durationMs}ms)`);
+  if (!result.ok && result.error) {
+    // 詳細なエラー情報を出力
+    const { message, code, stack } = result.error;
+    console.error(`[tRPC Error] ${type} ${path} - code: ${code}, message: ${message}`);
+    if (stack) {
+      console.error(stack);
+    }
+  }
   return result;
 });
 

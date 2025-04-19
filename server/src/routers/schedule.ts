@@ -46,7 +46,6 @@ export const scheduleRouter = router({
         const dateB = new Date(b.start_date);
         return dateA.getTime() - dateB.getTime();
       });
-      console.log(schedules);
       const s: StudySchedule[] = schedules;
       z.array(StudyScheduleSchema).parse(schedules);
       return schedules;
@@ -58,9 +57,10 @@ export const scheduleRouter = router({
     .mutation(async ({ input }) => {
       // テキストブック情報をAnkiから取得
       const noteIds = await ankiConnect.note.findNotes({
-        query: `deck:"Meta" tag:textbook ${toStringAnkiQuery(`"id":${input.textbook_id}`)}`
+        query: `deck:"Meta" tag:textbook ${toStringAnkiQuery(`"id":"${input.textbook_id}"`)}`
       });
       
+      console.log(noteIds)
       const notesInfo = await ankiConnect.note.notesInfo({
         notes: [noteIds[0]]
       });

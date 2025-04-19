@@ -33,9 +33,19 @@ export class ConflictError extends HttpError {
 }
 
 
-// エラーハンドリングミドルウェア
+/**
+ * エラーハンドリングミドルウェア
+ * すべての例外を一元的に捕捉し、必ずサーバーログにスタックトレースを出力する。
+ * try-catchを各所に分散させず、ここで一括処理する。
+ */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
+  // スタックトレースを必ずサーバーログに出力
+  if (err.stack) {
+    console.error('[Error]', err.stack);
+  } else {
+    console.error('[Error]', err.toString());
+  }
 
   let statusCode = 500;
   let errorMessage = 'Internal Server Error';

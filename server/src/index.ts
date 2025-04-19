@@ -1,3 +1,4 @@
+import 'source-map-support/register.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
