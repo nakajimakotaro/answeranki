@@ -41,8 +41,8 @@ export interface Exam {
  * 試験の点数情報を表すインターフェース (exam_scores テーブルに対応)
  */
 export interface ExamScore {
-  id: number;
-  exam_id: number; // 関連する試験ID
+  id: string;
+  exam_id: string; // 関連する試験ID
   note_id: number; // 関連する問題/ノートID (Ankiなど)
   descriptive_score?: number | null;
   multiple_choice_score?: number | null;
