@@ -133,6 +133,10 @@ const TodaysTasks = () => {
                 task.anki_deck_name ??
                 textbooks.find((tb: { id: string; anki_deck_name: string | null }) => tb.id === task.textbook_id)?.anki_deck_name ??
                 null;
+              // 祝日・曜日ごとのゴール取得
+              const today = new Date();
+              const dayIndex = today.getDay();
+              const goalCount = task.weekday_goals?.[dayIndex] ?? task.daily_goal;
               return (
                 <div
                   key={task.id}
@@ -151,7 +155,7 @@ const TodaysTasks = () => {
                     科目: {task.textbook_subject}
                   </div>
                   <div className="text-sm text-gray-600 mb-3">
-                    目標: {task.daily_goal !== null ? `${task.daily_goal} 問` : '未設定'}
+                    目標: {goalCount != null ? `${goalCount} 問` : '未設定'}
                   </div>
 
                   {deckName ? (
