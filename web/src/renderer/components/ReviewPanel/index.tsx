@@ -307,7 +307,7 @@ const ReviewPanel = ({
   return (
     <>
       <div
-        className="fixed top-0 right-0 w-80 bg-white shadow-lg z-20 flex flex-col rounded-lg overflow-hidden transition-all duration-300 ease-in-out scrollbar-hidden"
+        className="fixed top-0 right-0 w-80 bg-white z-20 flex flex-col overflow-hidden transition-all duration-300 ease-in-out scrollbar-hidden"
       >
         {/* Panel Header - Now clickable */}
         <div
