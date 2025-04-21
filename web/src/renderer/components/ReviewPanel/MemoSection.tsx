@@ -3,9 +3,6 @@ import { MemoSectionProps } from './types';
 const MemoSection = ({ memo, onMemoChange }: MemoSectionProps) => {
   return (
     <div className="mb-4">
-      <label htmlFor="memo" className="block text-sm font-medium text-gray-700 mb-1">
-        メモ:
-      </label>
       <textarea
         id="memo"
         rows={3}

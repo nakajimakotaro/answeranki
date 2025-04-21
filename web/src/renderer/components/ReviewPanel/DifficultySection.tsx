@@ -10,9 +10,6 @@ const DifficultySection = ({ selectedEase, onEaseSelect }: DifficultySectionProp
 
   return (
     <div className="mb-4">
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        難易度を選択:
-      </label>
       <div className="grid grid-cols-4 gap-1">
         {easeOptions.map(ease => (
           <button

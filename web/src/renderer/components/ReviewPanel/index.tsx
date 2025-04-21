@@ -307,16 +307,16 @@ const ReviewPanel = ({
   return (
     <>
       <div
-        className="fixed top-4 right-4 w-80 bg-white shadow-lg z-20 flex flex-col rounded-lg overflow-hidden transition-all duration-300 ease-in-out scrollbar-hidden"
+        className="fixed top-0 right-0 w-80 bg-white shadow-lg z-20 flex flex-col rounded-lg overflow-hidden transition-all duration-300 ease-in-out scrollbar-hidden"
       >
         {/* Panel Header - Now clickable */}
         <div
-          className="p-4 border-b flex-shrink-0 cursor-pointer hover:bg-gray-50" // cursor-pointer と hover を追加
+          className="py-2 px-4 border-b flex-shrink-0 cursor-pointer hover:bg-gray-50" // cursor-pointer と hover を追加
           onClick={handleToggleAccordion} // onClick を追加
         >
           <div className="flex justify-between items-center w-full"> {/* w-full を追加 */}
             {/* Title always visible */}
-            <h3 className="text-lg font-semibold flex items-center">
+            <h3 className="text-base font-semibold flex items-center">
               <Edit className="w-4 h-4 mr-2 flex-shrink-0" />
               <span>レビューパネル</span>
             </h3>
