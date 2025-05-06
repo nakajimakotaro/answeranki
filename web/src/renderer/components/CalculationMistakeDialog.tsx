@@ -1,20 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom'; // ReactDOM をインポート
+import React, { useState, useEffect, useMemo } from 'react'; // useMemo をインポート
+import ReactDOM from 'react-dom';
 import { trpc } from '../lib/trpc';
-import { CalculationMistakeType } from '@shared/schemas/calculationMistake'; // 型をインポート
+import { CalculationMistakeType, CalculationMistakeDetail } from '@shared/schemas/calculationMistake'; // CalculationMistakeDetail をインポート
 
 interface CalculationMistakeDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  problemNoteId?: number; // オプションで問題IDを受け取る (フェーズ3用)
+  problemNoteId?: number;
+  initialData?: CalculationMistakeDetail; // 編集用の初期データ
 }
 
-export const CalculationMistakeDialog: React.FC<CalculationMistakeDialogProps> = ({ isOpen, onClose, problemNoteId }) => {
+export const CalculationMistakeDialog: React.FC<CalculationMistakeDialogProps> = ({
+  isOpen,
+  onClose,
+  problemNoteId,
+  initialData,
+}) => {
   const utils = trpc.useUtils();
   const [selectedTypeId, setSelectedTypeId] = useState<string>('');
   const [newTypeName, setNewTypeName] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [showNewTypeInput, setShowNewTypeInput] = useState<boolean>(false);
+  const isEditing = useMemo(() => !!initialData, [initialData]); // 編集モードかどうか
 
   // 種類一覧を取得
   const { data: types, isLoading: isLoadingTypes, error: errorTypes } = trpc.calculationMistake.listTypes.useQuery();
@@ -53,15 +60,38 @@ export const CalculationMistakeDialog: React.FC<CalculationMistakeDialogProps> =
     }
   });
 
-  // ダイアログが閉じられたときに state をリセット
-  useEffect(() => {
-    if (!isOpen) {
-      setSelectedTypeId('');
-      setNewTypeName('');
-      setDescription('');
-      setShowNewTypeInput(false);
+  // 詳細を更新するミューテーション
+  const updateDetailMutation = trpc.calculationMistake.updateDetail.useMutation({
+    onSuccess: () => {
+      utils.calculationMistake.listDetails.invalidate(); // 詳細リストを再取得
+      onClose(); // ダイアログを閉じる
+    },
+    onError: (error) => {
+      console.error("Failed to update detail:", error);
+      alert(`計算ミスの更新に失敗しました: ${error.message}`);
     }
-  }, [isOpen]);
+  });
+
+  // ダイアログが開かれたとき、または initialData が変更されたときに state を初期化/リセット
+  useEffect(() => {
+    if (isOpen) {
+      if (initialData) {
+        // 編集モード: initialData から state を設定
+        setSelectedTypeId(initialData.typeId);
+        setDescription(initialData.description);
+        setShowNewTypeInput(false); // 編集時は新規追加フォームを非表示
+        setNewTypeName('');
+      } else {
+        // 新規登録モード: state をリセット
+        setSelectedTypeId('');
+        setDescription('');
+        setShowNewTypeInput(false);
+        setNewTypeName('');
+        // problemNoteId は props から直接参照するため、state に保持しない
+      }
+    }
+    // isOpen が false になった時 (閉じた時) はリセット不要 (onClose で親が initialData を null にするため、次回開く時にリセットされる)
+  }, [isOpen, initialData]);
 
   const handleCreateType = () => {
     if (newTypeName.trim()) {
@@ -74,11 +104,25 @@ export const CalculationMistakeDialog: React.FC<CalculationMistakeDialogProps> =
       alert('ミスの種類と詳細を入力してください。');
       return;
     }
-    createDetailMutation.mutate({
+
+    const mutationData = {
       typeId: selectedTypeId,
       description: description.trim(),
-      problemNoteId: problemNoteId, // problemNoteId があれば渡す
-    });
+      // problemNoteId は編集時には更新しない (関連付けは変更不可とする)
+      // 新規登録時のみ problemNoteId を渡す
+      problemNoteId: isEditing ? undefined : problemNoteId,
+    };
+
+    if (isEditing && initialData) {
+      // 更新
+      updateDetailMutation.mutate({
+        id: initialData.id, // 更新対象のID
+        ...mutationData,
+      });
+    } else {
+      // 新規作成
+      createDetailMutation.mutate(mutationData);
+    }
   };
 
   if (!isOpen) {
@@ -91,9 +135,16 @@ export const CalculationMistakeDialog: React.FC<CalculationMistakeDialogProps> =
       {/* modal-backdrop を追加して背景をクリックで閉じられるようにする（オプション） */}
       {/* <div className="modal-backdrop" onClick={onClose}></div> */}
       <div className="modal-box w-11/12 max-w-md mx-auto relative p-6">
-        <h3 className="font-bold text-lg mb-5 text-center">計算ミスを登録</h3>
-        {problemNoteId && (
+        <h3 className="font-bold text-lg mb-5 text-center">
+          {isEditing ? '計算ミスを編集' : '計算ミスを登録'}
+        </h3>
+        {/* problemNoteId は新規登録時のみ表示 */}
+        {!isEditing && problemNoteId && (
           <p className="text-sm text-gray-500 mb-5 text-center">問題ノートID: {problemNoteId}</p>
+        )}
+        {/* 編集時は編集対象のIDを表示（デバッグ用、必要なら削除） */}
+        {isEditing && initialData && (
+           <p className="text-xs text-gray-400 mb-3 text-center">編集中のID: {initialData.id}</p>
         )}
 
         {/* 種類選択 */}
@@ -122,7 +173,7 @@ export const CalculationMistakeDialog: React.FC<CalculationMistakeDialogProps> =
                 setShowNewTypeInput(!showNewTypeInput);
                 setSelectedTypeId(''); // 新規追加モード時は選択解除
               }}
-              disabled={isLoadingTypes || createTypeMutation.isPending}
+              disabled={isLoadingTypes || createTypeMutation.isPending || isEditing} // 編集時は新規追加不可
             >
               {showNewTypeInput ? 'キャンセル' : '新規追加'}
             </button>
@@ -142,12 +193,12 @@ export const CalculationMistakeDialog: React.FC<CalculationMistakeDialogProps> =
                 className="input input-bordered w-full"
                 value={newTypeName}
                 onChange={(e) => setNewTypeName(e.target.value)}
-                disabled={createTypeMutation.isPending}
+                disabled={createTypeMutation.isPending || isEditing} // 編集時は新規追加不可
               />
               <button
                 className="btn btn-primary whitespace-nowrap"
                 onClick={handleCreateType}
-                disabled={!newTypeName.trim() || createTypeMutation.isPending}
+                disabled={!newTypeName.trim() || createTypeMutation.isPending || isEditing} // 編集時は新規追加不可
               >
                 {createTypeMutation.isPending ? <span className="loading loading-spinner loading-xs"></span> : '追加'}
               </button>
@@ -164,7 +215,7 @@ export const CalculationMistakeDialog: React.FC<CalculationMistakeDialogProps> =
             placeholder="どのようなミスをしたか具体的に記述..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            disabled={createDetailMutation.isPending}
+            disabled={createDetailMutation.isPending || updateDetailMutation.isPending}
           ></textarea>
         </div>
 
@@ -180,9 +231,19 @@ export const CalculationMistakeDialog: React.FC<CalculationMistakeDialogProps> =
           <button
             className="btn btn-primary"
             onClick={handleSave}
-            disabled={!selectedTypeId || !description.trim() || createDetailMutation.isPending || createTypeMutation.isPending}
+            disabled={
+              !selectedTypeId ||
+              !description.trim() ||
+              createDetailMutation.isPending ||
+              updateDetailMutation.isPending ||
+              createTypeMutation.isPending // 新規タイプ作成中も無効
+            }
           >
-            {createDetailMutation.isPending ? <span className="loading loading-spinner loading-xs"></span> : '保存'}
+            {(createDetailMutation.isPending || updateDetailMutation.isPending) ? (
+              <span className="loading loading-spinner loading-xs"></span>
+            ) : (
+              isEditing ? '更新' : '保存'
+            )}
           </button>
         </div>
       </div>

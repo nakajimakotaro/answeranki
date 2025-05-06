@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc.js';
 import { YankiConnect } from 'yanki-connect';
-import { CalculationMistakeTypeSchema, CalculationMistakeDetailSchema } from '@answeranki/shared/schemas/calculationMistake'; // CalculationMistakeDetailSchema をインポート
+import {
+  CalculationMistakeTypeSchema,
+  CalculationMistakeDetailSchema,
+  UpdateCalculationMistakeDetailInputSchema // 更新用スキーマをインポート
+} from '@answeranki/shared/schemas/calculationMistake';
 import { TRPCError } from '@trpc/server';
-import { toStringAnkiQuery } from '../utils.js'; // toStringAnkiQueryをインポート
+import { toStringAnkiQuery } from '../utils.js';
 
 const ankiConnect = new YankiConnect();
 
@@ -191,6 +195,67 @@ export const calculationMistakeRouter = router({
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to create calculation mistake detail in Anki.',
+          cause: error,
+        });
+      }
+    }),
+
+  /**
+   * 計算ミスの詳細を更新する
+   */
+  updateDetail: publicProcedure
+    .input(UpdateCalculationMistakeDetailInputSchema) // 更新用スキーマを使用
+    .mutation(async ({ input }) => {
+      try {
+        // 1. 更新対象のノート情報を取得して既存データを確認
+        const notesInfo = await ankiConnect.note.notesInfo({ notes: [parseInt(input.id, 10)] });
+        if (notesInfo.length === 0) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: `Calculation mistake detail with ID ${input.id} not found.`,
+          });
+        }
+        const existingNote = notesInfo[0];
+        let existingData: Partial<z.infer<typeof CalculationMistakeDetailSchema>> = {};
+        try {
+          existingData = JSON.parse(existingNote.fields.Info.value);
+        } catch (parseError) {
+          console.warn(`Failed to parse existing data for note ${input.id}. Proceeding with update, but some fields might be lost.`, parseError);
+          // パース失敗しても、最低限の更新は試みる
+        }
+
+        // 2. 更新後のデータを作成 (createdAt と problemNoteId は既存の値を維持)
+        const updatedDetailData = {
+          typeId: input.typeId,
+          description: input.description,
+          problemNoteId: existingData.problemNoteId, // 既存の値を維持
+          createdAt: existingData.createdAt ?? new Date().toISOString(), // 既存の値、なければ現在時刻 (フォールバック)
+        };
+
+        // 3. Ankiノートのフィールドを更新
+        await ankiConnect.note.updateNoteFields({
+          note: {
+            id: parseInt(input.id, 10),
+            fields: {
+              Info: JSON.stringify(updatedDetailData)
+            }
+            // タグは変更しない
+          }
+        });
+
+        // 更新成功時は何も返さない (void)
+        return;
+
+      } catch (error) {
+        // TRPCError はそのままスロー
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        // その他のエラー
+        console.error("Failed to update calculation mistake detail:", error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update calculation mistake detail in Anki.',
           cause: error,
         });
       }

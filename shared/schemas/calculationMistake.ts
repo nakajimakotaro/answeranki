@@ -18,3 +18,13 @@ export const CalculationMistakeDetailSchema = z.object({
 });
 
 export type CalculationMistakeDetail = z.infer<typeof CalculationMistakeDetailSchema>;
+
+// 計算ミスの詳細を更新するための入力スキーマ
+export const UpdateCalculationMistakeDetailInputSchema = z.object({
+  id: z.string(), // 更新対象のAnkiノートID
+  typeId: z.string(), // 新しいCalculationMistakeTypeのID
+  description: z.string(),
+  // problemNoteId と createdAt は更新不可とする
+});
+
+export type UpdateCalculationMistakeDetailInput = z.infer<typeof UpdateCalculationMistakeDetailInputSchema>;
