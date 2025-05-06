@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom'; // useSearchParams をインポート
-import { RefreshCw, ChevronLeft, AlertCircle, BookOpen } from 'lucide-react'; // BookOpen をインポート
+import { useState, useEffect, useCallback, useRef } from 'react'; // useRef をインポート
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { RefreshCw, ChevronLeft, AlertCircle, BookOpen } from 'lucide-react'; // PlusCircle を削除
 import ProblemDisplay, { ProblemData } from '../components/ProblemDisplay';
-import ReviewPanel from '../components/ReviewPanel/index'; // Corrected import path
-import { ReviewPanelSaveData } from '../components/ReviewPanel/types'; // Import type separately
+import ReviewPanel from '../components/ReviewPanel/index';
+import { ReviewPanelSaveData } from '../components/ReviewPanel/types';
+import { CalculationMistakeSection } from '../components/CalculationMistakeSection'; // CalculationMistakeSection をインポート
 import { trpc } from '../lib/trpc';
-// useAnkiAction はまだ使わないのでコメントアウト (必要なら後で追加)
-// import { useAddAnswerToNote, useMediaFiles, useAnkiAction } from '../hooks/index.js';
+// import { CalculationMistakeDialog } from '../components/CalculationMistakeDialog'; // 削除
 import { useAddAnswerToNote, useMediaFiles } from '../hooks/index.js';
 
 /**
@@ -21,7 +21,40 @@ const ReviewPage = () => {
 
   const [showAnswer, setShowAnswer] = useState(false);
   const [problemData, setProblemData] = useState<ProblemData | null>(null);
-  const [currentDeckName, setCurrentDeckName] = useState<string | null>(null); // デッキ名を保持する state
+  const [currentDeckName, setCurrentDeckName] = useState<string | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null); // WakeLockSentinel を保持する ref
+  // isMistakeDialogOpen state を削除
+
+  // --- スリープ防止ロジック ---
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+          wakeLockRef.current.addEventListener('release', () => {
+            console.log('Screen Wake Lock released:', wakeLockRef.current);
+            wakeLockRef.current = null; // 参照をクリア
+          });
+          console.log('Screen Wake Lock acquired:', wakeLockRef.current);
+        } catch (err: any) {
+          console.error(`Failed to acquire Screen Wake Lock: ${err.name}, ${err.message}`);
+        }
+      } else {
+        console.warn('Screen Wake Lock API not supported.');
+      }
+    };
+
+    requestWakeLock();
+
+    // クリーンアップ関数
+    return () => {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release()
+          .then(() => console.log('Screen Wake Lock released on unmount.'))
+          .catch((err) => console.error('Error releasing wake lock on unmount:', err));
+      }
+    };
+  }, []); // マウント時に一度だけ実行
 
   // --- tRPC データ取得ロジック ---
 
@@ -46,7 +79,9 @@ const ReviewPage = () => {
     { enabled: !!noteIdFromReview }
   );
 
-  // 4. カード解答ミューテーション
+  // 計算ミス取得ロジックを削除 (CalculationMistakeSection 内に移動)
+
+  // 5. カード解答ミューテーション (番号を4に変更)
   const { mutateAsync: guiAnswerCard, isPending: isAnswering, isSuccess: answerSuccess, error: answerError } = trpc.anki.graphical.guiAnswerCard.useMutation({
     onSuccess: async () => {
       console.log('解答が登録されました');
@@ -61,7 +96,7 @@ const ReviewPage = () => {
     }
   });
 
-  // 5. 解答表示ミューテーション
+  // 6. 解答表示ミューテーション (番号を5に変更)
   const { mutateAsync: guiShowAnswer, isPending: isShowingAnswer, error: showAnswerError } = trpc.anki.graphical.guiShowAnswer.useMutation({
     onError: (err) => {
       console.error('解答の表示に失敗しました:', err);
@@ -114,8 +149,10 @@ const ReviewPage = () => {
 
   const handleRefresh = useCallback(() => {
     refetchCurrentCard();
+    // refetchCurrentCard(); // 重複呼び出し削除
     setShowAnswer(false);
-  }, [refetchCurrentCard, utils, cardIdFromReview, noteIdFromReview]);
+    // refetchMistakes() を削除 (CalculationMistakeSection 内で管理)
+  }, [refetchCurrentCard]); // noteIdFromReview, refetchMistakes を削除
 
   const handleNavigateBack = useCallback(() => {
     navigate(-1); // 前のページに戻る
@@ -124,6 +161,9 @@ const ReviewPage = () => {
   const handleToggleAnswer = useCallback(() => {
     setShowAnswer(prev => !prev);
   }, []);
+
+  // handleOpenMistakeDialog, handleCloseMistakeDialog を削除 (CalculationMistakeSection 内に移動)
+
 
   // ProblemDisplay から呼ばれる解答処理
   const handleAnswerCard = useCallback(async (ease: 1 | 2 | 3 | 4) => {
@@ -204,9 +244,10 @@ const ReviewPage = () => {
 
 
   // --- ローディングとエラー状態の集約 ---
-  const isLoading = isLoadingCurrentCard || isLoadingCardsInfo || isLoadingNotesInfo || isShowingAnswer; // isShowingAnswer を追加
-  const queryError = currentCardError || cardsInfoError || notesInfoError || showAnswerError; // showAnswerError を追加
-  const panelError = saveError || answerError || showAnswerError; // showAnswerError を追加
+  // 計算ミスのローディング/エラーを削除
+  const isLoading = isLoadingCurrentCard || isLoadingCardsInfo || isLoadingNotesInfo || isShowingAnswer;
+  const queryError = currentCardError || cardsInfoError || notesInfoError || showAnswerError;
+  const panelError = saveError || answerError || showAnswerError;
 
   return (
     <div className="container mx-auto p-4 relative">
@@ -249,44 +290,48 @@ const ReviewPage = () => {
             <p>{queryError.message}</p>
             {/* 必要に応じてリトライボタンなどを追加 */}
           </div>
-        </div>
+         </div>
       )}
 
       {/* メインコンテンツエリア */}
-      <div className="flex">
-        {/* 問題表示エリア (problemData がある場合のみ表示) */}
-        {problemData && (
-          <div className="flex-grow">
-            <ProblemDisplay
-              key={problemData.cardId} // cardId を key に設定してカード変更時にコンポーネントを再生成
-              problemData={problemData}
+      {/* 問題表示エリア (problemData がある場合のみ表示) */}
+      {problemData && (
+        <div className="mb-6"> {/* 下にマージンを追加 */}
+          <ProblemDisplay
+            key={problemData.cardId} // cardId を key に設定してカード変更時にコンポーネントを再生成
+            problemData={problemData}
               isLoading={isLoading}
             showAnswer={showAnswer}
             onToggleAnswer={handleToggleAnswer}
             onAnswer={handleAnswerCard} // ProblemDisplay内のボタンから呼ぶ
             isAnswering={isAnswering}
               isReviewMode={true} // レビューボタンを表示
-            />
-          </div>
-        )}
+          />
+        </div>
+      )}
 
-        {/* レビューパネル (常に表示、位置調整はCSSで行う想定) */}
+      {/* 計算ミスセクション (解答表示時のみ) */}
+      {problemData && showAnswer && ( // showAnswer を条件に追加
+        <CalculationMistakeSection problemNoteId={noteIdFromReview} />
+      )}
+
+      {/* レビューパネル */}
+      {problemData && (
         <ReviewPanel
-          cardId={problemData?.cardId}
+          cardId={problemData.cardId}
           onSave={handleSaveReview}
-          isSaving={isSavingAnswer || isMediaLoading || isAnswering || isShowingAnswer} // isShowingAnswer を追加
-          saveSuccess={saveSuccess || answerSuccess} // ノート更新成功 または 解答成功
-          // panelError が存在する場合、新しい Error オブジェクトを作成して渡す
-          saveError={panelError ? new Error(panelError.message) : null} // panelError に showAnswerError が含まれるようになった
+          isSaving={isSavingAnswer || isMediaLoading || isAnswering || isShowingAnswer}
+          saveSuccess={saveSuccess || answerSuccess}
+          saveError={panelError ? new Error(panelError.message) : null}
         />
-      </div>
+      )}
 
-       {/* データがない、またはデッキが指定されていない場合の表示 (ローディング完了後) */}
-       {!isLoading && (!problemData || !currentDeckName) && !queryError && (
+      {/* データがない、またはデッキが指定されていない場合の表示 (ローディング完了後) */}
+      {!isLoading && (!problemData || !currentDeckName) && !queryError && (
          <div className="text-center text-gray-500 py-10">
            { !currentDeckName ? "レビュー対象のデッキが指定されていません。" : "レビューするカードがありません。" }
          </div>
-      )}
+       )}
     </div>
   );
 };

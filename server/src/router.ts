@@ -4,6 +4,7 @@ import { imageRouter } from './routers/image.js';
 import { textbookRouter } from './routers/textbook.js';
 import { scheduleRouter } from './routers/schedule.js';
 import { examRouter } from './routers/exam.js';
+import { calculationMistakeRouter } from './routers/calculationMistake.js'; // calculationMistakeRouterをインポート
 import { cardRouter, deckRouter, graphicalRouter, mediaRouter, miscellaneousRouter, noteRouter, statisticRouter  } from './routers/anki.js';
 
 export const appRouter = router({
@@ -12,6 +13,7 @@ export const appRouter = router({
   schedule: scheduleRouter,
   exam: examRouter,
   image: imageRouter,
+  calculationMistake: calculationMistakeRouter, // calculationMistakeRouterをマージ
   anki: {
     card: cardRouter,
     deck: deckRouter,

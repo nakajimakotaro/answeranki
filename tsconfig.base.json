@@ -1,21 +1,19 @@
 {
   "compilerOptions": {
-    /* Base Options */
-    "target": "ES2022", // Use the latest stable ECMAScript version
-    "module": "NodeNext", // Use Node.js's native ESM support
-    "moduleResolution": "NodeNext", // Align module resolution with Node.js ESM
-    "strict": true, // Enable all strict type-checking options
-    "forceConsistentCasingInFileNames": true, // Disallow inconsistently-cased references to the same file
-    "sourceMap": true, // Generate corresponding '.map' files
-    "composite": true, // Enable constraints that allow a TypeScript project to be used with project references
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true,
+    "composite": true,
 
-    /* Path Aliases - Define relative to the root */
-    "baseUrl": ".", // Base directory for path resolution
+    "baseUrl": ".",
     "paths": {
       "@server/*": ["server/src/*"],
-      "@answeranki/shared/*": ["shared/*"], // Corrected: points to shared/
-      "@shared/*": ["shared/*"]           // Corrected: points to shared/
+      "@answeranki/shared/*": ["shared/*"],
+      "@shared/*": ["shared/*"]
     }
   },
-  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts"] // Exclude common folders and test files
+  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts"]
 }

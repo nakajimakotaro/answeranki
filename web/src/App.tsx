@@ -19,6 +19,7 @@ import UniversitiesPage from './renderer/routes/UniversitiesPage.js';
 import SchedulesPage from './renderer/routes/SchedulesPage.js';
 import ExamsPage from './renderer/routes/ExamsPage.js';
 import TodaysTasks from './renderer/routes/TodaysTasks.js';
+import { CalculationMistakesPage } from './renderer/routes/CalculationMistakesPage.js'; // 追加
 import { AppRouter } from '@server/router';
 import { trpc } from './renderer/lib/trpc.js';
 
@@ -50,6 +51,7 @@ function AppContent() {
           <Route path="universities" element={<UniversitiesPage />} />
           <Route path="schedules" element={<SchedulesPage />} />
           <Route path="exams" element={<ExamsPage />} />
+          <Route path="calculation-mistakes" element={<CalculationMistakesPage />} /> {/* 追加 */}
         </Route>
       </Routes>
     </Router>

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { RefreshCw, ChevronLeft, AlertCircle } from 'lucide-react';
+import { RefreshCw, ChevronLeft, AlertCircle } from 'lucide-react'; // PlusCircle を削除
 import ProblemDisplay, { ProblemData } from '../components/ProblemDisplay';
+import { CalculationMistakeSection } from '../components/CalculationMistakeSection'; // CalculationMistakeSection をインポート
 import { trpc } from '../lib/trpc';
 
 /**
@@ -10,12 +11,13 @@ import { trpc } from '../lib/trpc';
 const ProblemDetailPage = () => {
   const { noteId: noteIdString } = useParams<{ noteId: string }>();
   const navigate = useNavigate();
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(); // utils を取得
 
   const noteId = noteIdString ? parseInt(noteIdString, 10) : undefined;
 
   const [showAnswer, setShowAnswer] = useState(false);
   const [problemData, setProblemData] = useState<ProblemData | null>(null);
+  // isMistakeDialogOpen state を削除
 
   // --- tRPC データ取得ロジック ---
 
@@ -31,6 +33,8 @@ const ProblemDetailPage = () => {
     { cards: [cardIdFromNote!] },
     { enabled: !!cardIdFromNote }
   );
+
+  // 計算ミス取得ロジックを削除 (CalculationMistakeSection 内に移動)
 
   // --- データ結合ロジック ---
   useEffect(() => {
@@ -59,6 +63,7 @@ const ProblemDetailPage = () => {
     if (noteId) refetchNotesInfo();
     if (cardIdFromNote) refetchCardsInfo();
     setShowAnswer(false);
+    // refetchMistakes() を削除 (CalculationMistakeSection 内で管理)
   }, [noteId, cardIdFromNote, refetchNotesInfo, refetchCardsInfo]);
 
   const handleNavigateBack = useCallback(() => {
@@ -69,7 +74,11 @@ const ProblemDetailPage = () => {
     setShowAnswer(prev => !prev);
   }, []);
 
+  // handleOpenMistakeDialog, handleCloseMistakeDialog を削除 (CalculationMistakeSection 内に移動)
+
+
   // --- ローディングとエラー状態の集約 ---
+  // 計算ミスのローディング/エラーを削除
   const isLoading = isLoadingNotesInfo || isLoadingCardsInfo;
   const queryError = notesInfoError || cardsInfoError;
 
@@ -123,7 +132,14 @@ const ProblemDetailPage = () => {
          <div className="text-center text-gray-500 py-10">
            指定された問題が見つかりません。
          </div>
+       )}
+
+      {/* 計算ミスセクション (共通コンポーネントを使用) */}
+      {problemData && ( // problemData がある場合のみ表示
+        <CalculationMistakeSection problemNoteId={noteId} />
       )}
+
+      {/* CalculationMistakeDialog の呼び出しを削除 (CalculationMistakeSection 内に移動) */}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { FileText, List, BookOpen, Calendar, GraduationCap, BarChart, FileCheck } from 'lucide-react';
+import { FileText, List, BookOpen, Calendar, GraduationCap, BarChart, FileCheck, Calculator } from 'lucide-react'; // Calculator を追加
 
 const Sidebar = () => {
   const location = useLocation();
@@ -78,6 +78,15 @@ const Sidebar = () => {
             >
               <FileCheck className="w-5 h-5 mr-3" />
               <span>試験管理</span>
+            </Link>
+          </li>
+          <li>
+            <Link
+              to="/calculation-mistakes"
+              className={`flex items-center p-2 rounded-md ${isActive('/calculation-mistakes')}`}
+            >
+              <Calculator className="w-5 h-5 mr-3" />
+              <span>計算ミス</span>
             </Link>
           </li>
         </ul>

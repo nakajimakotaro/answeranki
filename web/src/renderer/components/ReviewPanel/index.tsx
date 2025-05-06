@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Edit, ChevronDown, ChevronUp } from 'lucide-react'; // ChevronDown, ChevronUp を追加
+import { Edit } from 'lucide-react'; // ChevronDown, ChevronUp を削除
 import { useMediaFiles } from '../../hooks/index.js';
 import scansnap, { COLOR_MODE, COMPRESSION, FORMAT, SCAN_MODE, SCANNING_SIDE } from '../../../scansnap.js';
 import { nanoid } from 'nanoid';
 import { ReviewPanelProps, ReviewPanelSaveData, TimerMode } from './types'; // TimerMode をインポート
 import TimerSection from './TimerSection';
-import AccordionContent from './AccordionContent';
+// import AccordionContent from './AccordionContent'; // AccordionContent を削除
 import TimeInputSection from './TimeInputSection';
 import ScannerSection from './ScannerSection';
 import ImageUploadSection from './ImageUploadSection';
@@ -44,7 +44,7 @@ const ReviewPanel = ({
   const [solvingTime, setSolvingTime] = useState(''); // MM:SS 形式
   const [reviewTime, setReviewTime] = useState(''); // MM:SS 形式
   const [selectedEase, setSelectedEase] = useState<1 | 2 | 3 | 4 | null>(null);
-  const [isAccordionOpen, setIsAccordionOpen] = useState(false);
+  // const [isAccordionOpen, setIsAccordionOpen] = useState(false); // isAccordionOpen を削除
 
   // --- Timer Functions ---
   const formatTime = useCallback((ms: number) => {
@@ -64,10 +64,9 @@ const ReviewPanel = ({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }, []);
 
-
-  const startTimer = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (timerRunning) return;
+  // タイマーを開始するコアロジック
+  const startTimerInternal = useCallback(() => {
+    if (timerRunning) return; // 既に実行中なら何もしない
     setTimerRunning(true);
     const currentElapsedTime = timerMode === 'solving' ? elapsedTime : reviewElapsedTime;
     startTimeRef.current = Date.now() - currentElapsedTime;
@@ -81,7 +80,13 @@ const ReviewPanel = ({
         }
       }
     }, 100);
-  }, [timerRunning, timerMode, elapsedTime, reviewElapsedTime]);
+  }, [timerRunning, timerMode, elapsedTime, reviewElapsedTime]); // 依存配列は変更なし
+
+  // イベントハンドラとしての startTimer
+  const startTimer = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    startTimerInternal(); // 内部ロジックを呼び出す
+  }, [startTimerInternal]);
 
   const pauseTimer = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -142,6 +147,20 @@ const ReviewPanel = ({
     };
   }, []);
   // --- Timer Functions End ---
+
+  // --- Auto Start Timer ---
+  useEffect(() => {
+    // cardId があり、タイマーが実行中でなく、解答モードの場合にタイマーを開始
+    if (cardId && !timerRunning && timerMode === 'solving') {
+      startTimerInternal();
+    }
+    // cardId が変更されたら（新しい問題が表示されたら）、タイマーをリセットして開始
+    // ただし、初回マウント時や cardId が null -> 有効 になった場合はリセットしない
+    // このロジックは少し複雑になるため、まずは自動開始のみ実装
+    // TODO: カードが変わったときにタイマーをリセットするかどうか検討
+  }, [cardId, timerRunning, timerMode, startTimerInternal]); // cardId と timerMode を依存配列に追加
+  // --- Auto Start Timer End ---
+
 
   // --- Scanner Logic ---
   useEffect(() => {
@@ -285,7 +304,7 @@ const ReviewPanel = ({
     setReviewElapsedTime(0); // Reset timer value
     setTimerMode('solving'); // Reset mode to solving
     setSelectedEase(null);
-    setIsAccordionOpen(false);
+    // setIsAccordionOpen(false); // アコーディオン状態のリセットを削除
     // Ensure timer interval is cleared and refs are null
     // pauseTimer(); // Already called above
 
@@ -293,7 +312,7 @@ const ReviewPanel = ({
   // --- Save Logic End ---
 
   // --- Other Handlers ---
-  const handleToggleAccordion = useCallback(() => setIsAccordionOpen(prev => !prev), []);
+  // const handleToggleAccordion = useCallback(() => setIsAccordionOpen(prev => !prev), []); // アコーディオン切り替えハンドラを削除
   const handleEnlargeImage = useCallback((preview: string) => setEnlargedImage(preview), []);
   const handleCloseDialog = useCallback(() => setEnlargedImage(null), []);
   const handleEaseSelect = useCallback((ease: 1 | 2 | 3 | 4 | null) => setSelectedEase(ease), []);
@@ -306,26 +325,23 @@ const ReviewPanel = ({
 
   return (
     <>
+      {/* Adjusted container styling: added border, rounded corners, shadow, padding, and spacing between elements */}
       <div
-        className="fixed top-0 right-0 w-80 bg-white z-20 flex flex-col overflow-hidden transition-all duration-300 ease-in-out scrollbar-hidden"
+        className="bg-white border rounded-lg shadow-sm flex flex-col overflow-hidden scrollbar-hidden mb-6 p-4 space-y-4"
       >
-        {/* Panel Header - Now clickable */}
+        {/* Panel Header - Not clickable anymore, simplified */}
         <div
-          className="py-2 px-4 border-b flex-shrink-0 cursor-pointer hover:bg-gray-50" // cursor-pointer と hover を追加
-          onClick={handleToggleAccordion} // onClick を追加
+          className="flex items-center"
         >
-          <div className="flex justify-between items-center w-full"> {/* w-full を追加 */}
-            {/* Title always visible */}
-            <h3 className="text-base font-semibold flex items-center">
-              <Edit className="w-4 h-4 mr-2 flex-shrink-0" />
-              <span>レビューパネル</span>
-            </h3>
-            {/* Toggle icon moved here */}
-            {isAccordionOpen ? <ChevronUp className="w-5 h-5 text-gray-600" /> : <ChevronDown className="w-5 h-5 text-gray-600" />}
-          </div>
+          {/* Title */}
+          <h3 className="text-lg font-semibold flex items-center"> {/* Increased title size */}
+            <Edit className="w-5 h-5 mr-2 text-gray-600 flex-shrink-0" /> {/* Adjusted icon size/color */}
+            <span>レビュー入力</span> {/* Changed title text */}
+          </h3>
+          {/* Removed toggle icon */}
         </div>
 
-        {/* Timer Section */}
+        {/* Timer Section - Placed inside the main div */}
         <TimerSection
           timerMode={timerMode}
           elapsedTime={elapsedTime}
@@ -338,11 +354,11 @@ const ReviewPanel = ({
           formatTime={formatTime}
         />
 
-        {/* Accordion Content */}
-        <AccordionContent isAccordionOpen={isAccordionOpen}>
-          <TimeInputSection
-            solvingTime={solvingTime}
-            reviewTime={reviewTime}
+        {/* Content Sections - Always visible, removed AccordionContent wrapper */}
+        {/* Added spacing between sections implicitly via parent's space-y-4 */}
+        <TimeInputSection
+          solvingTime={solvingTime}
+          reviewTime={reviewTime}
             timerRunning={timerRunning}
             timerMode={timerMode} // timerMode を渡す
             onSolvingTimeChange={handleSolvingTimeChange}
@@ -379,7 +395,7 @@ const ReviewPanel = ({
             saveError={saveError}
             onSave={handleInternalSave}
           />
-        </AccordionContent>
+        {/* Removed closing AccordionContent tag */}
       </div>
 
       {/* Image Enlargement Dialog */}
