@@ -27,17 +27,32 @@ const ReviewPage = () => {
 
   // --- スリープ防止ロジック ---
   useEffect(() => {
+    let wakeLock: WakeLockSentinel | null = null; // ローカル変数で管理
+
     const requestWakeLock = async () => {
       if ('wakeLock' in navigator) {
         try {
-          wakeLockRef.current = await navigator.wakeLock.request('screen');
-          wakeLockRef.current.addEventListener('release', () => {
-            console.log('Screen Wake Lock released:', wakeLockRef.current);
-            wakeLockRef.current = null; // 参照をクリア
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log('Screen Wake Lock acquired:', wakeLock);
+
+          // 解除イベントのリスナー
+          wakeLock.addEventListener('release', () => {
+            // wakeLock が外部要因 (例: 画面非表示) で解除された場合
+            console.log('Screen Wake Lock released externally:', wakeLock);
+            // wakeLock 変数を null にして、クリーンアップで再度 release しないようにする
+            if (wakeLock === wakeLockRef.current) { // まだクリーンアップで解放されていなければ
+              wakeLockRef.current = null;
+            }
+            wakeLock = null; // ローカル変数もクリア
           });
-          console.log('Screen Wake Lock acquired:', wakeLockRef.current);
+
+          // ref にも保持 (他の場所で参照する場合)
+          wakeLockRef.current = wakeLock;
+
         } catch (err: any) {
           console.error(`Failed to acquire Screen Wake Lock: ${err.name}, ${err.message}`);
+          wakeLock = null; // 取得失敗時は null
+          wakeLockRef.current = null;
         }
       } else {
         console.warn('Screen Wake Lock API not supported.');
@@ -48,10 +63,25 @@ const ReviewPage = () => {
 
     // クリーンアップ関数
     return () => {
-      if (wakeLockRef.current) {
-        wakeLockRef.current.release()
-          .then(() => console.log('Screen Wake Lock released on unmount.'))
+      // コンポーネントのアンマウント時に Wake Lock を解放する
+      // wakeLock 変数が存在し、かつ ref と同じインスタンスであることを確認
+      if (wakeLock && wakeLock === wakeLockRef.current) {
+        wakeLock.release()
+          .then(() => {
+            console.log('Screen Wake Lock released on unmount.');
+            wakeLockRef.current = null; // ref もクリア
+            wakeLock = null; // ローカル変数もクリア
+          })
           .catch((err) => console.error('Error releasing wake lock on unmount:', err));
+      } else if (wakeLockRef.current) {
+        // release イベントが先に発火して wakeLock が null になったが、
+        // ref がまだ残っている場合 (念のため)
+        wakeLockRef.current.release()
+         .then(() => {
+            console.log('Screen Wake Lock released on unmount (ref fallback).');
+            wakeLockRef.current = null;
+          })
+         .catch((err) => console.error('Error releasing wake lock on unmount (ref fallback):', err));
       }
     };
   }, []); // マウント時に一度だけ実行

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom'; // Link をインポート
 import { trpc } from '../lib/trpc';
 import { CalculationMistakeDialog } from '../components/CalculationMistakeDialog'; // ダイアログをインポート
 
@@ -63,6 +64,7 @@ export const CalculationMistakesPage: React.FC = () => {
                 <tr>
                   <th>詳細</th>
                   <th>登録日時</th>
+                  <th>問題へ</th> {/* 列ヘッダーを追加 */}
                   {/* TODO: 必要に応じて他の列を追加 */}
                 </tr>
               </thead>
@@ -71,6 +73,15 @@ export const CalculationMistakesPage: React.FC = () => {
                   <tr key={detail.id}>
                     <td>{detail.description}</td>
                     <td>{new Date(detail.createdAt).toLocaleString()}</td>
+                    <td> {/* 問題へのリンク列 */}
+                      {detail.problemNoteId ? (
+                        <Link to={`/problem/${detail.problemNoteId}`} className="btn btn-sm btn-outline whitespace-nowrap"> {/* whitespace-nowrap を追加 */}
+                          詳細
+                        </Link>
+                      ) : (
+                        '-' // リンクがない場合はハイフン表示
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
