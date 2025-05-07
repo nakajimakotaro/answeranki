@@ -94,19 +94,6 @@ const ProblemDisplay = ({
       }
     });
   };
-  // --- 解答エントリ抽出ここまで ---
-
-  // 過去解答の抽出 (problemDataが更新されたら再計算)
-  const [pastAnswers, setPastAnswers] = useState<{ date: string; content: string }[]>([]);
-  useEffect(() => {
-    const pastAnswerField = problemData?.fields?.['過去解答']?.value;
-    if (pastAnswerField) {
-      setPastAnswers(extractAnswerEntries(pastAnswerField));
-    } else {
-      setPastAnswers([]);
-    }
-  }, [problemData]);
-
 
   // --- レンダリング ---
   if (isLoading) {
@@ -183,24 +170,6 @@ const ProblemDisplay = ({
           <div className="p-3 bg-gray-50 rounded border prose max-w-none" dangerouslySetInnerHTML={{ __html: processHtml(problemData.answer || '解答がありません') }} />
 
           {/* レビューモード用の解答ボタンは削除 (コントロールパネルと重複するため) */}
-        </div>
-      )}
-
-      {/* 過去の解答 */}
-      {showAnswer && (
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-2">
-            <div className="text-sm text-gray-500">過去の解答用紙</div>
-          </div>
-          {pastAnswers.length > 0 ? (
-            <div className="p-3 bg-gray-50 rounded border prose max-w-none">
-              {pastAnswers.map((entry, index) => (
-                <div key={index} dangerouslySetInnerHTML={{ __html: processHtml(entry.content) }} />
-              ))}
-            </div>
-          ) : (
-            <div className="p-3 bg-gray-50 rounded border text-gray-500">過去の解答はありません</div>
-          )}
         </div>
       )}
     </div>
